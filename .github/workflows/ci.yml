@@ -4,13 +4,23 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'lambda-templates/lambda-go-template/**'
+      - 'src/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'terraform/**'
       - '.github/workflows/ci.yml'
+      - '.golangci.yml'
+      - 'Taskfile.yml'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'lambda-templates/lambda-go-template/**'
+      - 'src/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'terraform/**'
       - '.github/workflows/ci.yml'
+      - '.golangci.yml'
+      - 'Taskfile.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -85,9 +95,9 @@ jobs:
 
       - name: Create deployment package
         run: |
-          mkdir -p build
+          mkdir -p build/${{ matrix.function }}
           cd src/${{ matrix.function }}
-          zip -r ../../build/${{ matrix.function }}.zip bootstrap
+          zip ../../build/${{ matrix.function }}.zip bootstrap
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -111,6 +121,7 @@ jobs:
         with:
           version: latest
           working-directory: .
+          args: --config .golangci.yml
 
   security:
     runs-on: ubuntu-latest

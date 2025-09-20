@@ -55,21 +55,24 @@ func processHelloRequest(ctx context.Context, request events.APIGatewayProxyRequ
 	// Get Lambda context for request ID
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	// Add tracing subsegment
-	_, seg := xray.BeginSubsegment(ctx, "processHelloRequest")
-	defer seg.Close(nil)
+	// Add tracing subsegment (only in AWS Lambda environment)
+	var seg *xray.Segment
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		_, seg = xray.BeginSubsegment(ctx, "processHelloRequest")
+		defer seg.Close(nil)
 
-	// Add tracing annotations
-	seg.AddAnnotation("path", request.Path)
-	seg.AddAnnotation("httpMethod", request.HTTPMethod)
+		// Add tracing annotations
+		seg.AddAnnotation("path", request.Path)
+		seg.AddAnnotation("httpMethod", request.HTTPMethod)
+	}
 
 	// Log structured information
 	logger.Info("Processing hello request",
 		zap.String("path", request.Path),
 		zap.String("httpMethod", request.HTTPMethod),
 		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", lc.FunctionName),
-		zap.String("functionVersion", lc.FunctionVersion),
+		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
+		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
 	)
 
 	// Simulate business processing
@@ -83,9 +86,11 @@ func processHelloRequest(ctx context.Context, request events.APIGatewayProxyRequ
 		RequestID:   lc.AwsRequestID,
 	}
 
-	// Add response to tracing metadata
+	// Add response to tracing metadata (only if tracing is enabled)
 	responseData, _ := json.Marshal(response)
-	seg.AddMetadata("response", string(responseData))
+	if seg != nil {
+		seg.AddMetadata("response", string(responseData))
+	}
 
 	logger.Info("Hello request processed successfully",
 		zap.String("requestId", lc.AwsRequestID),
@@ -110,18 +115,20 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (Respon
 	// Get Lambda context
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	// Create tracing segment
-	ctx, seg := xray.BeginSegment(ctx, "hello-lambda")
-	defer seg.Close(nil)
+	// Create tracing segment (only in AWS Lambda environment)
+	var seg *xray.Segment
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		ctx, seg = xray.BeginSegment(ctx, "hello-lambda")
+		defer seg.Close(nil)
 
-	// Add correlation ID for tracing
-	seg.AddAnnotation("correlationId", lc.AwsRequestID)
+		// Add correlation ID for tracing
+		seg.AddAnnotation("correlationId", lc.AwsRequestID)
+	}
 
 	logger.Info("Lambda invocation started",
 		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", lc.FunctionName),
-		zap.String("functionVersion", lc.FunctionVersion),
-		zap.Int64("remainingTimeMs", lc.RemainingTimeInMillis()),
+		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
+		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
 	)
 
 	// Process the request
@@ -132,8 +139,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (Respon
 			zap.String("requestId", lc.AwsRequestID),
 		)
 
-		// Add error to tracing
-		seg.AddError(err)
+		// Add error to tracing (only if tracing is enabled)
+		if seg != nil {
+			seg.AddError(err)
+		}
 
 		// Create error response
 		errorResponse := map[string]interface{}{

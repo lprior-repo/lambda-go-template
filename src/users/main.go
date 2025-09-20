@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -57,9 +58,12 @@ func init() {
 }
 
 func getUsersFromDatabase(ctx context.Context) ([]User, error) {
-	// Add tracing subsegment
-	_, seg := xray.BeginSubsegment(ctx, "getUsersFromDatabase")
-	defer seg.Close(nil)
+	// Add tracing subsegment (only in AWS Lambda environment)
+	var seg *xray.Segment
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		_, seg = xray.BeginSubsegment(ctx, "getUsersFromDatabase")
+		defer seg.Close(nil)
+	}
 
 	// Simulate database latency
 	time.Sleep(50 * time.Millisecond)
@@ -86,8 +90,10 @@ func getUsersFromDatabase(ctx context.Context) ([]User, error) {
 		},
 	}
 
-	// Add tracing annotation
-	seg.AddAnnotation("userCount", len(users))
+	// Add tracing annotation (only if tracing is enabled)
+	if seg != nil {
+		seg.AddAnnotation("userCount", len(users))
+	}
 
 	logger.Info("Users retrieved from database",
 		zap.Int("userCount", len(users)),
@@ -100,21 +106,24 @@ func processUsersRequest(ctx context.Context, request events.APIGatewayProxyRequ
 	// Get Lambda context for request ID
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	// Add tracing subsegment
-	_, seg := xray.BeginSubsegment(ctx, "processUsersRequest")
-	defer seg.Close(nil)
+	// Add tracing subsegment (only in AWS Lambda environment)
+	var seg *xray.Segment
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		_, seg = xray.BeginSubsegment(ctx, "processUsersRequest")
+		defer seg.Close(nil)
 
-	// Add tracing annotations
-	seg.AddAnnotation("path", request.Path)
-	seg.AddAnnotation("httpMethod", request.HTTPMethod)
+		// Add tracing annotations
+		seg.AddAnnotation("path", request.Path)
+		seg.AddAnnotation("httpMethod", request.HTTPMethod)
+	}
 
 	// Log structured information
 	logger.Info("Processing users request",
 		zap.String("path", request.Path),
 		zap.String("httpMethod", request.HTTPMethod),
 		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", lc.FunctionName),
-		zap.String("functionVersion", lc.FunctionVersion),
+		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
+		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
 	)
 
 	// Fetch users data
@@ -130,9 +139,11 @@ func processUsersRequest(ctx context.Context, request events.APIGatewayProxyRequ
 		RequestID: lc.AwsRequestID,
 	}
 
-	// Add response to tracing metadata
+	// Add response to tracing metadata (only if tracing is enabled)
 	responseData, _ := json.Marshal(response)
-	seg.AddMetadata("response", string(responseData))
+	if seg != nil {
+		seg.AddMetadata("response", string(responseData))
+	}
 
 	logger.Info("Users request processed successfully",
 		zap.String("requestId", lc.AwsRequestID),
@@ -158,18 +169,20 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (Respon
 	// Get Lambda context
 	lc, _ := lambdacontext.FromContext(ctx)
 
-	// Create tracing segment
-	ctx, seg := xray.BeginSegment(ctx, "users-lambda")
-	defer seg.Close(nil)
+	// Create tracing segment (only in AWS Lambda environment)
+	var seg *xray.Segment
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		ctx, seg = xray.BeginSegment(ctx, "users-lambda")
+		defer seg.Close(nil)
 
-	// Add correlation ID for tracing
-	seg.AddAnnotation("correlationId", lc.AwsRequestID)
+		// Add correlation ID for tracing
+		seg.AddAnnotation("correlationId", lc.AwsRequestID)
+	}
 
 	logger.Info("Lambda invocation started",
 		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", lc.FunctionName),
-		zap.String("functionVersion", lc.FunctionVersion),
-		zap.Int64("remainingTimeMs", lc.RemainingTimeInMillis()),
+		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
+		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
 	)
 
 	// Process the request
@@ -180,8 +193,10 @@ func handler(ctx context.Context, request events.APIGatewayProxyRequest) (Respon
 			zap.String("requestId", lc.AwsRequestID),
 		)
 
-		// Add error to tracing
-		seg.AddError(err)
+		// Add error to tracing (only if tracing is enabled)
+		if seg != nil {
+			seg.AddError(err)
+		}
 
 		// Create error response
 		errorResponse := map[string]interface{}{
