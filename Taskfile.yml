@@ -1,0 +1,397 @@
+version: '3'
+
+# Serverless Acceleration Platform - Go Template
+# Velocity First: Ship with Confidence & Discipline
+
+vars:
+  PROJECT_NAME: lambda-go-template
+  AWS_REGION: us-east-1
+  ENVIRONMENT: dev
+  GO_VERSION: 1.21
+  GOOS: linux
+  GOARCH: arm64
+
+env:
+  AWS_REGION: "{{.AWS_REGION}}"
+  GOOS: "{{.GOOS}}"
+  GOARCH: "{{.GOARCH}}"
+  CGO_ENABLED: "0"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  # 🚀 Velocity First: Build & Package
+  deps:
+    desc: Download Go module dependencies
+    cmds:
+      - go mod download
+      - go mod verify
+    sources:
+      - go.mod
+      - go.sum
+
+  build:
+    desc: Build Go Lambda functions for ARM64
+    deps: [deps]
+    cmds:
+      - echo "🔨 Building for {{.GOOS}}/{{.GOARCH}}..."
+      - mkdir -p build
+      - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -ldflags="-s -w" -o build/hello src/hello/main.go
+      - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -ldflags="-s -w" -o build/users src/users/main.go
+      - chmod +x build/hello build/users
+    sources:
+      - src/**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - build/hello
+      - build/users
+
+  package:
+    desc: Package Lambda functions for deployment
+    deps: [build]
+    cmds:
+      - echo "📦 Packaging Lambda functions..."
+      - cd build && zip hello.zip hello
+      - cd build && zip users.zip users
+      - echo "✅ Packages created: build/hello.zip, build/users.zip"
+    sources:
+      - build/hello
+      - build/users
+    generates:
+      - build/*.zip
+
+  # 🧪 Test-First: Build with Quality
+  test:
+    desc: Run all tests with coverage
+    deps: [deps]
+    cmds:
+      - go test -v -race -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - go tool cover -func=coverage.out
+
+  test:unit:
+    desc: Run unit tests only
+    deps: [deps]
+    cmds:
+      - go test -v -short ./...
+
+  test:integration:
+    desc: Run integration tests
+    deps: [deps]
+    cmds:
+      - go test -v -run Integration ./...
+
+  test:race:
+    desc: Run tests with race detection
+    deps: [deps]
+    cmds:
+      - go test -v -race ./...
+
+  test:bench:
+    desc: Run benchmark tests
+    deps: [deps]
+    cmds:
+      - go test -v -bench=. -benchmem ./...
+
+  test:watch:
+    desc: Run tests in watch mode for TDD
+    deps: [deps]
+    cmds:
+      - |
+        if command -v watchexec >/dev/null 2>&1; then
+          watchexec -e go -- go test -v ./...
+        elif command -v fswatch >/dev/null 2>&1; then
+          fswatch -o . | xargs -n1 -I{} go test -v ./...
+        else
+          echo "⚠️  Install watchexec or fswatch for watch mode"
+          echo "📋 Run 'go test -v ./...' manually after changes"
+        fi
+
+  # 📊 Observability First: Ship with Insight
+  logs:
+    desc: Tail Lambda function logs
+    cmds:
+      - aws logs tail /aws/lambda/{{.PROJECT_NAME}}-hello --follow
+
+  logs:hello:
+    desc: Get hello function logs with structured output
+    cmds:
+      - echo "📋 Latest log streams for hello function:"
+      - aws logs describe-log-streams --log-group-name /aws/lambda/{{.PROJECT_NAME}}-hello --order-by LastEventTime --descending --max-items 5
+      - echo "📝 Recent log events:"
+      - aws logs get-log-events --log-group-name /aws/lambda/{{.PROJECT_NAME}}-hello --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/{{.PROJECT_NAME}}-hello --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text) --limit 50
+
+  logs:users:
+    desc: Get users function logs with structured output
+    cmds:
+      - echo "📋 Latest log streams for users function:"
+      - aws logs describe-log-streams --log-group-name /aws/lambda/{{.PROJECT_NAME}}-users --order-by LastEventTime --descending --max-items 5
+      - echo "📝 Recent log events:"
+      - aws logs get-log-events --log-group-name /aws/lambda/{{.PROJECT_NAME}}-users --log-stream-name $(aws logs describe-log-streams --log-group-name /aws/lambda/{{.PROJECT_NAME}}-users --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text) --limit 50
+
+  xray:
+    desc: View X-Ray traces
+    cmds:
+      - echo "🔍 X-Ray Service Map: https://{{.AWS_REGION}}.console.aws.amazon.com/xray/home?region={{.AWS_REGION}}#/service-map"
+      - echo "📊 X-Ray Traces: https://{{.AWS_REGION}}.console.aws.amazon.com/xray/home?region={{.AWS_REGION}}#/traces"
+
+  metrics:
+    desc: View CloudWatch metrics dashboard
+    cmds:
+      - echo "📊 CloudWatch Dashboard: https://{{.AWS_REGION}}.console.aws.amazon.com/cloudwatch/home?region={{.AWS_REGION}}#dashboards:name={{.PROJECT_NAME}}"
+      - echo "⚡ Lambda Metrics: https://{{.AWS_REGION}}.console.aws.amazon.com/lambda/home?region={{.AWS_REGION}}#/functions"
+
+  # 🏗️ Infrastructure as Code
+  tf:init:
+    desc: Initialize Terraform
+    dir: terraform
+    cmds:
+      - terraform init
+
+  tf:plan:
+    desc: Plan Terraform changes
+    dir: terraform
+    deps: [tf:init]
+    cmds:
+      - terraform plan -var="environment={{.ENVIRONMENT}}"
+
+  tf:apply:
+    desc: Apply Terraform changes
+    dir: terraform
+    deps: [package]
+    cmds:
+      - terraform apply -var="environment={{.ENVIRONMENT}}" -auto-approve
+
+  tf:destroy:
+    desc: Destroy Terraform infrastructure
+    dir: terraform
+    cmds:
+      - terraform destroy -var="environment={{.ENVIRONMENT}}" -auto-approve
+
+  # 🔐 OIDC Bootstrap
+  bootstrap:
+    desc: Bootstrap OIDC for GitHub Actions deployment
+    dir: terraform
+    deps: [tf:init]
+    cmds:
+      - |
+        echo "🚀 Bootstrapping OIDC infrastructure..."
+        read -p "GitHub Organization: " GITHUB_ORG
+        read -p "GitHub Repository: " GITHUB_REPO
+        read -p "Create new OIDC provider? (y/n): " CREATE_OIDC
+        CREATE_OIDC_BOOL=$([ "$CREATE_OIDC" = "y" ] && echo "true" || echo "false")
+        terraform plan \
+          -var="github_org=$GITHUB_ORG" \
+          -var="github_repo=$GITHUB_REPO" \
+          -var="create_oidc_provider=$CREATE_OIDC_BOOL" \
+          -var="environment={{.ENVIRONMENT}}" \
+          -out=bootstrap.tfplan
+        echo ""
+        echo "📋 Review the plan above. Continue? (y/n)"
+        read -p "> " CONTINUE
+        if [ "$CONTINUE" = "y" ]; then
+          terraform apply bootstrap.tfplan
+          echo ""
+          echo "✅ OIDC infrastructure created!"
+          echo "🔧 Bootstrap script generated at: scripts/bootstrap-oidc.sh"
+          echo "📄 Run the script to generate GitHub Actions workflow"
+        else
+          echo "❌ Bootstrap cancelled"
+        fi
+
+  tf:validate:
+    desc: Validate Terraform configuration
+    dir: terraform
+    cmds:
+      - terraform validate
+      - terraform fmt -check
+
+  tf:security:
+    desc: Run security checks on Terraform
+    dir: terraform
+    cmds:
+      - |
+        if command -v tfsec >/dev/null 2>&1; then
+          tfsec .
+        else
+          echo "⚠️  tfsec not installed. Install with: brew install tfsec"
+        fi
+
+  # 🛡️ Well-Architected: Ship with Excellence
+  lint:
+    desc: Run Go linting tools
+    deps: [deps]
+    cmds:
+      - gofmt -s -w .
+      - go vet ./...
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          golangci-lint run
+        else
+          echo "⚠️  golangci-lint not installed. Install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin"
+        fi
+
+  security:
+    desc: Run security audit
+    deps: [deps]
+    cmds:
+      - |
+        if command -v gosec >/dev/null 2>&1; then
+          gosec ./...
+        else
+          echo "⚠️  gosec not installed. Install with: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest"
+        fi
+      - go list -json -deps ./... | nancy sleuth
+
+  mod:tidy:
+    desc: Tidy and verify Go modules
+    cmds:
+      - go mod tidy
+      - go mod verify
+
+  validate:
+    desc: Run all validation checks
+    deps: [deps]
+    cmds:
+      - task: lint
+      - task: test
+      - task: tf:validate
+      - task: tf:security
+      - task: security
+
+  # 🚀 Deployment Pipeline
+  deploy:dev:
+    desc: Deploy to development environment
+    cmds:
+      - task: validate
+      - task: tf:apply
+        vars: {ENVIRONMENT: dev}
+
+  deploy:staging:
+    desc: Deploy to staging environment
+    cmds:
+      - task: validate
+      - task: tf:apply
+        vars: {ENVIRONMENT: staging}
+
+  deploy:prod:
+    desc: Deploy to production environment
+    cmds:
+      - task: validate
+      - task: tf:apply
+        vars: {ENVIRONMENT: prod}
+
+  # 🧹 Cleanup
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf build/
+      - rm -f coverage.out coverage.html
+      - go clean -cache -testcache -modcache
+
+  clean:tf:
+    desc: Clean Terraform state (DANGEROUS)
+    dir: terraform
+    cmds:
+      - rm -rf .terraform/
+      - rm -f .terraform.lock.hcl
+      - rm -f terraform.tfstate*
+
+  # 🔍 Development Tools
+  dev:setup:
+    desc: Setup Go development environment
+    cmds:
+      - go version
+      - task: deps
+      - task: tf:init
+      - echo "✅ Go development environment ready!"
+      - echo "🐹 Go version: {{.GO_VERSION}}"
+      - echo "🏗️  Target: {{.GOOS}}/{{.GOARCH}}"
+      - echo "💡 Run 'task test:watch' for TDD workflow"
+      - echo "🚀 Run 'task deploy:dev' to deploy"
+
+  dev:tools:
+    desc: Install Go development tools
+    cmds:
+      - go install golang.org/x/tools/cmd/goimports@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+      - echo "🛠️ Development tools installed!"
+
+  dev:invoke:
+    desc: Invoke Lambda function locally using SAM
+    deps: [build]
+    cmds:
+      - |
+        echo "🧪 Invoking hello function locally..."
+        if command -v sam >/dev/null 2>&1; then
+          sam local invoke HelloFunction --event events/api-gateway-event.json
+        else
+          echo "⚠️  AWS SAM CLI not installed"
+        fi
+
+  api:docs:
+    desc: Generate API documentation from OpenAPI spec
+    cmds:
+      - |
+        if command -v redoc-cli >/dev/null 2>&1; then
+          redoc-cli build openapi.yaml --output docs/api.html
+          echo "📚 API documentation generated: docs/api.html"
+        else
+          echo "⚠️  redoc-cli not installed. Run: npm install -g redoc-cli"
+        fi
+
+  api:validate:
+    desc: Validate OpenAPI specification
+    cmds:
+      - |
+        if command -v swagger >/dev/null 2>&1; then
+          swagger validate openapi.yaml
+        else
+          echo "⚠️  swagger CLI not installed"
+          echo "📝 OpenAPI spec located at: openapi.yaml"
+        fi
+
+  # 📊 Performance Analysis
+  profile:
+    desc: Run CPU profiling on functions
+    deps: [build]
+    cmds:
+      - echo "🔬 Running CPU profile..."
+      - go test -cpuprofile=cpu.prof -bench=. ./...
+      - go tool pprof -http=:8080 cpu.prof &
+      - echo "📊 Profile server at: http://localhost:8080"
+
+  profile:memory:
+    desc: Run memory profiling on functions
+    deps: [build]
+    cmds:
+      - echo "🔬 Running memory profile..."
+      - go test -memprofile=mem.prof -bench=. ./...
+      - go tool pprof -http=:8081 mem.prof &
+      - echo "📊 Memory profile server at: http://localhost:8081"
+
+  # 📊 Well-Architected Review
+  review:
+    desc: Open Well-Architected review document
+    cmds:
+      - |
+        if [ -f "WELL_ARCHITECTED.md" ]; then
+          echo "📋 Opening Well-Architected review..."
+          open WELL_ARCHITECTED.md 2>/dev/null || echo "📄 Review document: WELL_ARCHITECTED.md"
+        else
+          echo "❌ WELL_ARCHITECTED.md not found. Run 'task generate:docs' first."
+        fi
+
+  generate:docs:
+    desc: Generate project documentation
+    cmds:
+      - task: api:docs
+      - task: test
+      - echo "📚 Documentation generated successfully!"
+      - echo "📊 Coverage report: coverage.html"
+      - echo "📚 API docs: docs/api.html"

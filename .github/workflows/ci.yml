@@ -1,0 +1,202 @@
+name: 🚀 Continuous Integration
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'lambda-templates/lambda-go-template/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'lambda-templates/lambda-go-template/**'
+      - '.github/workflows/ci.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.23"
+  TERRAFORM_VERSION: '1.9.0'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      functions: ${{ steps.changes.outputs.functions }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed functions
+        id: changes
+        run: |
+          # Get list of all function directories
+          FUNCTIONS=$(find src -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | jq -R -s -c 'split("\n")[:-1]')
+          echo "functions=$FUNCTIONS" >> $GITHUB_OUTPUT
+          echo "Detected functions: $FUNCTIONS"
+
+  build:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        function: ${{ fromJson(needs.detect-changes.outputs.functions) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run tests
+        run: |
+          if [ -f "src/${{ matrix.function }}/main_test.go" ]; then
+            cd src/${{ matrix.function }}
+            go test -v ./...
+          else
+            echo "No tests found for ${{ matrix.function }}, skipping"
+          fi
+
+      - name: Build function
+        run: |
+          cd src/${{ matrix.function }}
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap main.go
+
+      - name: Create deployment package
+        run: |
+          mkdir -p build
+          cd src/${{ matrix.function }}
+          zip -r ../../build/${{ matrix.function }}.zip bootstrap
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.function }}-lambda-go
+          path: build/${{ matrix.function }}.zip
+          retention-days: 30
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: .
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run Gosec Security Scanner
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: './...'
+
+  # 🏗️ Infrastructure Validation
+  infrastructure:
+    name: 🏗️ Infrastructure Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: 🔧 Terraform Init
+        working-directory: terraform
+        run: terraform init -backend=false
+
+      - name: ✅ Terraform Validate
+        working-directory: terraform
+        run: terraform validate
+
+      - name: 🎨 Terraform Format Check
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+
+      - name: 🔍 TFLint Security Scan
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: 🔍 Run TFLint
+        working-directory: terraform
+        run: |
+          tflint --init
+          tflint --recursive --config=../.tflint.hcl
+
+      - name: 🛡️ Checkov Security Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: reports/checkov-results.sarif
+          quiet: true
+          soft_fail: false
+
+      - name: 📊 Upload Security Scan Results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: reports/checkov-results.sarif
+
+      - name: 💰 Infrastructure Cost Estimate
+        uses: infracost/actions/setup@v2
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: 💰 Generate Cost Estimate
+        run: |
+          cd terraform
+          infracost breakdown --path . \
+            --format json \
+            --out-file /tmp/infracost.json
+          infracost output --path /tmp/infracost.json \
+            --format table \
+            --out-file /tmp/infracost.txt
+
+      - name: 💰 Upload Cost Analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-cost-analysis-go
+          path: /tmp/infracost.*
+          retention-days: 30

@@ -1,0 +1,390 @@
+openapi: 3.0.3
+info:
+  title: Go Lambda Template API
+  description: |
+    A production-ready Core API Service template following the Serverless Acceleration Platform blueprint.
+
+    This API demonstrates:
+    - API-First design with OpenAPI as source of truth
+    - Well-Architected patterns with structured logging and tracing
+    - Test-First development with Go testing framework
+    - High-performance ARM64 Lambda deployment
+  version: 1.0.0
+  contact:
+    name: Platform Engineering
+    email: platform@company.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api-dev.company.com/v1
+    description: Development environment
+  - url: https://api-staging.company.com/v1
+    description: Staging environment
+  - url: https://api.company.com/v1
+    description: Production environment
+
+tags:
+  - name: Health
+    description: Service health and readiness endpoints
+  - name: Hello
+    description: Hello world service endpoints with Go performance
+  - name: Users
+    description: User management endpoints optimized for Go
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check endpoint
+      description: Returns service health status and dependency checks
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /hello:
+    get:
+      tags: [Hello]
+      summary: Hello world endpoint
+      description: Returns a greeting message with Go performance optimizations and observability
+      operationId: getHello
+      parameters:
+        - name: name
+          in: query
+          description: Name to include in greeting
+          required: false
+          schema:
+            type: string
+            example: "Gopher"
+        - name: format
+          in: query
+          description: Response format preference
+          required: false
+          schema:
+            type: string
+            enum: [json, minimal]
+            default: json
+      responses:
+        '200':
+          description: Successful greeting
+          headers:
+            X-Request-ID:
+              description: Unique request identifier for tracing
+              schema:
+                type: string
+                format: uuid
+            X-Trace-ID:
+              description: AWS X-Ray trace identifier
+              schema:
+                type: string
+            X-Execution-Time:
+              description: Function execution time in milliseconds
+              schema:
+                type: number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelloResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      description: Retrieve a list of users with high-performance pagination
+      operationId: getUsers
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of users to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 50
+        - name: cursor
+          in: query
+          description: Pagination cursor for next page
+          required: false
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: Sort order for results
+          required: false
+          schema:
+            type: string
+            enum: [created_asc, created_desc, name_asc, name_desc]
+            default: created_desc
+      responses:
+        '200':
+          description: Successful user list retrieval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - version
+        - service
+        - runtime
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        version:
+          type: string
+          example: "1.0.0"
+        service:
+          type: string
+          example: "go-lambda-template"
+        runtime:
+          type: object
+          properties:
+            version:
+              type: string
+              example: "go1.21"
+            architecture:
+              type: string
+              example: "arm64"
+        requestId:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        environment:
+          type: string
+          example: "dev"
+        uptime:
+          type: number
+          description: Service uptime in seconds
+          example: 3600
+        dependencies:
+          type: object
+          properties:
+            dynamodb:
+              type: string
+              enum: [healthy, unhealthy]
+            s3:
+              type: string
+              enum: [healthy, unhealthy]
+
+    HelloResponse:
+      type: object
+      required:
+        - message
+        - timestamp
+        - requestId
+        - environment
+      properties:
+        message:
+          type: string
+          example: "Hello from Lambda with observability!"
+        path:
+          type: string
+          example: "/hello"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        requestId:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        environment:
+          type: string
+          example: "dev"
+        performance:
+          type: object
+          properties:
+            executionTimeMs:
+              type: number
+              example: 45.2
+            memoryUsedMB:
+              type: number
+              example: 64.5
+            coldStart:
+              type: boolean
+              example: false
+        runtime:
+          type: object
+          properties:
+            version:
+              type: string
+              example: "go1.21"
+            architecture:
+              type: string
+              example: "arm64"
+
+    UsersResponse:
+      type: object
+      required:
+        - users
+        - pagination
+        - metadata
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        metadata:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 1250
+            executionTimeMs:
+              type: number
+              example: 23.4
+            sortBy:
+              type: string
+              example: "created_desc"
+
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - createdAt
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        email:
+          type: string
+          format: email
+          example: "gopher@company.com"
+        name:
+          type: string
+          example: "Go Developer"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        status:
+          type: string
+          enum: [active, inactive, suspended, pending]
+          example: active
+        metadata:
+          type: object
+          properties:
+            lastLoginAt:
+              type: string
+              format: date-time
+            loginCount:
+              type: integer
+            preferences:
+              type: object
+
+    Pagination:
+      type: object
+      required:
+        - limit
+        - hasMore
+      properties:
+        limit:
+          type: integer
+          example: 50
+        cursor:
+          type: string
+          nullable: true
+          example: "eyJpZCI6IjEyMyIsInRzIjoxNjA5NDU5MjAwfQ=="
+        hasMore:
+          type: boolean
+          example: true
+        totalPages:
+          type: integer
+          nullable: true
+          example: 25
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+        - requestId
+      properties:
+        error:
+          type: string
+          example: "ValidationError"
+        message:
+          type: string
+          example: "Invalid parameter value"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        requestId:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        path:
+          type: string
+          example: "/hello"
+        details:
+          type: object
+          description: Additional error context and validation details
+        trace:
+          type: object
+          properties:
+            function:
+              type: string
+              example: "handler"
+            file:
+              type: string
+              example: "main.go:42"
