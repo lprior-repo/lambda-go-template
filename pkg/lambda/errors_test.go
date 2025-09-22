@@ -2,34 +2,35 @@ package lambda
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewValidationError(t *testing.T) {
 	tests := []struct {
-		name          string
-		message       string
-		field         string
-		value         string
-		expectedCode  int
-		expectedType  string
+		name     string
+		message  string
+		field    string
+		value    interface{}
 	}{
 		{
-			name:         "basic validation error",
-			message:      "field is required",
-			field:        "username",
-			value:        "",
-			expectedCode: 400,
-			expectedType: "ValidationError",
+			name:    "basic validation error",
+			message: "field is required",
+			field:   "username",
+			value:   "",
 		},
 		{
-			name:         "validation error with special characters",
-			message:      "field must be alphanumeric",
-			field:        "user_id",
-			value:        "user@123",
-			expectedCode: 400,
-			expectedType: "ValidationError",
+			name:    "validation error with number value",
+			message: "value must be positive",
+			field:   "age",
+			value:   -5,
+		},
+		{
+			name:    "validation error with complex value",
+			message: "invalid format",
+			field:   "user_data",
+			value:   map[string]string{"invalid": "data"},
 		},
 	}
 
@@ -37,20 +38,68 @@ func TestNewValidationError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := NewValidationError(tt.message, tt.field, tt.value)
 
-			assert.Equal(t, tt.expectedCode, err.StatusCode)
-			assert.Equal(t, tt.expectedType, err.Type)
 			assert.Equal(t, tt.message, err.Message)
 			assert.Equal(t, tt.field, err.Field)
 			assert.Equal(t, tt.value, err.Value)
-			assert.NotEmpty(t, err.Timestamp)
+			assert.Nil(t, err.Err)
 		})
 	}
 }
 
 func TestValidationError_Error(t *testing.T) {
-	err := NewValidationError("test message", "testField", "testValue")
-	expected := "validation error for field 'testField': test message"
-	assert.Equal(t, expected, err.Error())
+	tests := []struct {
+		name     string
+		err      *ValidationError
+		expected string
+	}{
+		{
+			name: "validation error with field",
+			err: &ValidationError{
+				Message: "test message",
+				Field:   "testField",
+				Value:   "testValue",
+			},
+			expected: "validation error for field 'testField': test message",
+		},
+		{
+			name: "validation error without field",
+			err: &ValidationError{
+				Message: "test message",
+				Field:   "",
+				Value:   "testValue",
+			},
+			expected: "validation error: test message",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.err.Error()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestNewValidationErrorWithCause(t *testing.T) {
+	cause := assert.AnError
+	err := NewValidationErrorWithCause("test message", "field", "value", cause)
+
+	assert.Equal(t, "test message", err.Message)
+	assert.Equal(t, "field", err.Field)
+	assert.Equal(t, "value", err.Value)
+	assert.Equal(t, cause, err.Err)
+}
+
+func TestValidationError_Unwrap(t *testing.T) {
+	cause := assert.AnError
+	err := NewValidationErrorWithCause("test", "field", "value", cause)
+
+	unwrapped := err.Unwrap()
+	assert.Equal(t, cause, unwrapped)
+
+	// Test with no cause
+	errNoCause := NewValidationError("test", "field", "value")
+	assert.Nil(t, errNoCause.Unwrap())
 }
 
 func TestIsValidationError(t *testing.T) {
@@ -66,7 +115,7 @@ func TestIsValidationError(t *testing.T) {
 		},
 		{
 			name:     "not found error",
-			err:      NewNotFoundError("resource", "123"),
+			err:      NewNotFoundError("resource not found"),
 			expected: false,
 		},
 		{
@@ -90,48 +139,67 @@ func TestIsValidationError(t *testing.T) {
 }
 
 func TestNewNotFoundError(t *testing.T) {
+	message := "resource not found"
+	err := NewNotFoundError(message)
+
+	assert.Equal(t, message, err.Message)
+	assert.Empty(t, err.Resource)
+	assert.Empty(t, err.ID)
+}
+
+func TestNewResourceNotFoundError(t *testing.T) {
+	resource := "user"
+	id := "123"
+	message := "not found"
+
+	err := NewResourceNotFoundError(resource, id, message)
+
+	assert.Equal(t, message, err.Message)
+	assert.Equal(t, resource, err.Resource)
+	assert.Equal(t, id, err.ID)
+}
+
+func TestNotFoundError_Error(t *testing.T) {
 	tests := []struct {
-		name         string
-		resource     string
-		identifier   string
-		expectedCode int
-		expectedType string
+		name     string
+		err      *NotFoundError
+		expected string
 	}{
 		{
-			name:         "user not found",
-			resource:     "user",
-			identifier:   "123",
-			expectedCode: 404,
-			expectedType: "NotFoundError",
+			name: "full resource not found error",
+			err: &NotFoundError{
+				Message:  "not found",
+				Resource: "user",
+				ID:       "123",
+			},
+			expected: "user not found: not found with ID '123'",
 		},
 		{
-			name:         "product not found",
-			resource:     "product",
-			identifier:   "abc-def",
-			expectedCode: 404,
-			expectedType: "NotFoundError",
+			name: "resource error without ID",
+			err: &NotFoundError{
+				Message:  "not found",
+				Resource: "user",
+				ID:       "",
+			},
+			expected: "user not found: not found",
+		},
+		{
+			name: "simple not found error",
+			err: &NotFoundError{
+				Message:  "not found",
+				Resource: "",
+				ID:       "",
+			},
+			expected: "not found: not found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := NewNotFoundError(tt.resource, tt.identifier)
-
-			assert.Equal(t, tt.expectedCode, err.StatusCode)
-			assert.Equal(t, tt.expectedType, err.Type)
-			assert.Contains(t, err.Message, tt.resource)
-			assert.Contains(t, err.Message, tt.identifier)
-			assert.Equal(t, tt.resource, err.Resource)
-			assert.Equal(t, tt.identifier, err.Identifier)
-			assert.NotEmpty(t, err.Timestamp)
+			result := tt.err.Error()
+			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestNotFoundError_Error(t *testing.T) {
-	err := NewNotFoundError("user", "123")
-	expected := "user with identifier '123' not found"
-	assert.Equal(t, expected, err.Error())
 }
 
 func TestIsNotFoundError(t *testing.T) {
@@ -142,7 +210,7 @@ func TestIsNotFoundError(t *testing.T) {
 	}{
 		{
 			name:     "not found error",
-			err:      NewNotFoundError("user", "123"),
+			err:      NewNotFoundError("not found"),
 			expected: true,
 		},
 		{
@@ -166,21 +234,45 @@ func TestIsNotFoundError(t *testing.T) {
 }
 
 func TestNewTimeoutError(t *testing.T) {
-	operation := "database query"
-	err := NewTimeoutError(operation)
+	message := "operation timed out"
+	timeout := 30 * time.Second
 
-	assert.Equal(t, 408, err.StatusCode)
-	assert.Equal(t, "TimeoutError", err.Type)
-	assert.Contains(t, err.Message, operation)
-	assert.Contains(t, err.Message, "timeout")
-	assert.Equal(t, operation, err.Operation)
-	assert.NotEmpty(t, err.Timestamp)
+	err := NewTimeoutError(message, timeout)
+
+	assert.Equal(t, message, err.Message)
+	assert.Equal(t, timeout, err.Timeout)
 }
 
 func TestTimeoutError_Error(t *testing.T) {
-	err := NewTimeoutError("test operation")
-	expected := "operation 'test operation' timed out"
-	assert.Equal(t, expected, err.Error())
+	tests := []struct {
+		name     string
+		err      *TimeoutError
+		expected string
+	}{
+		{
+			name: "timeout with duration",
+			err: &TimeoutError{
+				Message: "operation timed out",
+				Timeout: 30 * time.Second,
+			},
+			expected: "timeout: operation timed out (after 30s)",
+		},
+		{
+			name: "timeout without duration",
+			err: &TimeoutError{
+				Message: "operation timed out",
+				Timeout: 0,
+			},
+			expected: "timeout: operation timed out",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.err.Error()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestIsTimeoutError(t *testing.T) {
@@ -191,7 +283,7 @@ func TestIsTimeoutError(t *testing.T) {
 	}{
 		{
 			name:     "timeout error",
-			err:      NewTimeoutError("operation"),
+			err:      NewTimeoutError("timeout", 30*time.Second),
 			expected: true,
 		},
 		{
@@ -216,12 +308,13 @@ func TestIsTimeoutError(t *testing.T) {
 
 func TestNewInternalError(t *testing.T) {
 	message := "database connection failed"
-	err := NewInternalError(message)
+	cause := assert.AnError
 
-	assert.Equal(t, 500, err.StatusCode)
-	assert.Equal(t, "InternalError", err.Type)
+	err := NewInternalError(message, cause)
+
 	assert.Equal(t, message, err.Message)
-	assert.NotEmpty(t, err.Timestamp)
+	assert.Equal(t, cause, err.Err)
+	assert.Empty(t, err.Operation)
 }
 
 func TestNewInternalErrorWithOperation(t *testing.T) {
@@ -231,13 +324,9 @@ func TestNewInternalErrorWithOperation(t *testing.T) {
 
 	err := NewInternalErrorWithOperation(operation, message, cause)
 
-	assert.Equal(t, 500, err.StatusCode)
-	assert.Equal(t, "InternalError", err.Type)
-	assert.Contains(t, err.Message, operation)
-	assert.Contains(t, err.Message, message)
+	assert.Equal(t, message, err.Message)
 	assert.Equal(t, operation, err.Operation)
-	assert.Equal(t, cause, err.Cause)
-	assert.NotEmpty(t, err.Timestamp)
+	assert.Equal(t, cause, err.Err)
 }
 
 func TestInternalError_Error(t *testing.T) {
@@ -247,23 +336,20 @@ func TestInternalError_Error(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "simple internal error",
-			err: &InternalError{
-				LambdaError: LambdaError{
-					Message: "simple error",
-				},
-			},
-			expected: "internal error: simple error",
-		},
-		{
 			name: "internal error with operation",
 			err: &InternalError{
-				LambdaError: LambdaError{
-					Message: "operation failed",
-				},
+				Message:   "failed to save",
 				Operation: "user creation",
 			},
-			expected: "internal error in operation 'user creation': operation failed",
+			expected: "internal error during user creation: failed to save",
+		},
+		{
+			name: "simple internal error",
+			err: &InternalError{
+				Message:   "database error",
+				Operation: "",
+			},
+			expected: "internal error: database error",
 		},
 	}
 
@@ -275,6 +361,18 @@ func TestInternalError_Error(t *testing.T) {
 	}
 }
 
+func TestInternalError_Unwrap(t *testing.T) {
+	cause := assert.AnError
+	err := NewInternalError("test", cause)
+
+	unwrapped := err.Unwrap()
+	assert.Equal(t, cause, unwrapped)
+
+	// Test with no cause
+	errNoCause := NewInternalError("test", nil)
+	assert.Nil(t, errNoCause.Unwrap())
+}
+
 func TestIsInternalError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -283,7 +381,7 @@ func TestIsInternalError(t *testing.T) {
 	}{
 		{
 			name:     "internal error",
-			err:      NewInternalError("test"),
+			err:      NewInternalError("test", nil),
 			expected: true,
 		},
 		{
@@ -306,164 +404,9 @@ func TestIsInternalError(t *testing.T) {
 	}
 }
 
-func TestLambdaError_GetStatusCode(t *testing.T) {
-	tests := []struct {
-		name         string
-		err          error
-		expectedCode int
-	}{
-		{
-			name:         "validation error",
-			err:          NewValidationError("test", "field", "value"),
-			expectedCode: 400,
-		},
-		{
-			name:         "not found error",
-			err:          NewNotFoundError("user", "123"),
-			expectedCode: 404,
-		},
-		{
-			name:         "timeout error",
-			err:          NewTimeoutError("operation"),
-			expectedCode: 408,
-		},
-		{
-			name:         "internal error",
-			err:          NewInternalError("test"),
-			expectedCode: 500,
-		},
-		{
-			name:         "generic error",
-			err:          assert.AnError,
-			expectedCode: 500,
-		},
-		{
-			name:         "nil error",
-			err:          nil,
-			expectedCode: 200,
-		},
-	}
+func TestNewConflictError(t *testing.T) {
+	message := "resource already exists"
+	err := NewConflictError(message)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			code := GetStatusCode(tt.err)
-			assert.Equal(t, tt.expectedCode, code)
-		})
-	}
-}
-
-func TestErrorSerialization(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-	}{
-		{
-			name: "validation error",
-			err:  NewValidationError("test message", "field", "value"),
-		},
-		{
-			name: "not found error",
-			err:  NewNotFoundError("user", "123"),
-		},
-		{
-			name: "timeout error",
-			err:  NewTimeoutError("operation"),
-		},
-		{
-			name: "internal error",
-			err:  NewInternalError("test message"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test that error implements error interface
-			assert.Implements(t, (*error)(nil), tt.err)
-
-			// Test that Error() method returns non-empty string
-			errorString := tt.err.Error()
-			assert.NotEmpty(t, errorString)
-
-			// Test that error message is meaningful
-			assert.Contains(t, errorString, "error")
-		})
-	}
-}
-
-func TestErrorTimestamps(t *testing.T) {
-	tests := []struct {
-		name    string
-		errFunc func() error
-	}{
-		{
-			name:    "validation error",
-			errFunc: func() error { return NewValidationError("test", "field", "value") },
-		},
-		{
-			name:    "not found error",
-			errFunc: func() error { return NewNotFoundError("user", "123") },
-		},
-		{
-			name:    "timeout error",
-			errFunc: func() error { return NewTimeoutError("operation") },
-		},
-		{
-			name:    "internal error",
-			errFunc: func() error { return NewInternalError("test") },
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.errFunc()
-
-			// All error types should have timestamps
-			switch e := err.(type) {
-			case *ValidationError:
-				assert.NotEmpty(t, e.Timestamp)
-			case *NotFoundError:
-				assert.NotEmpty(t, e.Timestamp)
-			case *TimeoutError:
-				assert.NotEmpty(t, e.Timestamp)
-			case *InternalError:
-				assert.NotEmpty(t, e.Timestamp)
-			default:
-				t.Errorf("Unexpected error type: %T", err)
-			}
-		})
-	}
-}
-
-func TestErrorChaining(t *testing.T) {
-	originalErr := assert.AnError
-	internalErr := NewInternalErrorWithOperation("test operation", "test message", originalErr)
-
-	assert.Equal(t, originalErr, internalErr.Cause)
-	assert.Contains(t, internalErr.Error(), "test operation")
-	assert.Contains(t, internalErr.Error(), "test message")
-}
-
-func TestConcurrentErrorCreation(t *testing.T) {
-	// Test that error creation is safe for concurrent use
-	const numGoroutines = 100
-	errors := make([]error, numGoroutines)
-	done := make(chan bool, numGoroutines)
-
-	for i := 0; i < numGoroutines; i++ {
-		go func(index int) {
-			errors[index] = NewValidationError("concurrent test", "field", "value")
-			done <- true
-		}(i)
-	}
-
-	// Wait for all goroutines to complete
-	for i := 0; i < numGoroutines; i++ {
-		<-done
-	}
-
-	// Verify all errors were created successfully
-	for i, err := range errors {
-		assert.NotNil(t, err, "Error %d should not be nil", i)
-		assert.IsType(t, &ValidationError{}, err, "Error %d should be ValidationError", i)
-	}
-}
+	assert.Equal(t, message, err.Message)
+	assert.Empty(t, err
