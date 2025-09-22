@@ -18,8 +18,15 @@ This template provides a complete setup for AWS Lambda functions written in Go, 
 ├── .github/
 │   └── workflows/
 │       └── build.yml   # GitHub Actions CI/CD
+├── events/             # SAM test events
+│   ├── hello-event.json
+│   └── users-*-event.json
+├── docs/               # Documentation
+│   ├── SAM_LOCAL_DEBUGGING.md
+│   └── SAM_QUICK_START.md
 ├── go.mod
-├── Makefile
+├── Taskfile.yml        # Task automation
+├── samconfig.toml      # SAM CLI configuration
 └── README.md
 ```
 
@@ -28,7 +35,9 @@ This template provides a complete setup for AWS Lambda functions written in Go, 
 - Go 1.21+
 - Terraform >= 1.13
 - AWS CLI configured
-- Make (optional, for using Makefile commands)
+- Task (optional, for using Taskfile commands)
+- AWS SAM CLI (for local debugging)
+- Docker (required for SAM local execution)
 
 ## Getting Started
 
@@ -62,6 +71,23 @@ This template provides a complete setup for AWS Lambda functions written in Go, 
 
 ## Development
 
+### Local Development with SAM
+
+For local testing and debugging, this project supports AWS SAM CLI integration:
+
+```bash
+# Quick start - build and test locally
+task sam:build          # Build SAM application
+task sam:invoke:hello   # Test hello function
+task sam:api            # Start local API Gateway
+
+# Debugging
+task debug:hello        # Debug hello function (attach on port 5986)
+task debug:api          # Debug with local API Gateway
+```
+
+See [SAM Quick Start Guide](docs/SAM_QUICK_START.md) for a 5-minute setup, or [SAM Local Debugging Guide](docs/SAM_LOCAL_DEBUGGING.md) for comprehensive documentation.
+
 ### Adding a New Function
 
 1. Create a new directory under `src/` (e.g., `src/orders/`)
@@ -72,38 +98,44 @@ This template provides a complete setup for AWS Lambda functions written in Go, 
 ### Building
 
 ```bash
-# Build all functions
-make build
+# Build all functions (production)
+task build
 
-# Or manually
-mkdir -p build
-for func in $(find src -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
-    cd src/$func
-    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bootstrap main.go
-    zip -r ../../build/$func.zip bootstrap
-    rm bootstrap
-    cd ../..
-done
+# Build for local debugging (with debug symbols)
+task build:debug
+
+# Build and package for deployment
+task package
 ```
 
 ### Testing
 
 ```bash
-# Run tests
-make test
+# Run all tests with coverage
+task test
 
-# Or manually
-go test ./...
+# Run tests in watch mode (TDD)
+task test:watch
+
+# Test locally with SAM
+task sam:test
+
+# Test individual functions
+task sam:invoke:hello
+task sam:invoke:users
 ```
 
 ### Linting
 
 ```bash
-# Run linter
-make lint
+# Run all linting and validation
+task validate
 
-# Install golangci-lint first
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+# Run linting only
+task lint
+
+# Install development tools
+task dev:tools
 ```
 
 ## CI/CD
@@ -134,6 +166,31 @@ Edit `terraform/variables.tf` to customize:
 After deployment, you'll get:
 - `GET /hello` - Hello function
 - `GET /users` - Users function
+
+## Local Development & Debugging
+
+This project includes comprehensive SAM CLI integration for local development:
+
+### Quick Commands
+```bash
+# Start local API Gateway
+task sam:api
+
+# Debug functions with breakpoints
+task debug:hello        # VS Code: F5 to attach debugger
+task debug:users
+
+# Test individual functions
+task sam:invoke:hello
+task sam:invoke:users
+```
+
+### IDE Integration
+- **VS Code**: Configured debug settings in `.vscode/launch.json`
+- **Command Line**: Uses Delve debugger (`dlv connect localhost:5986`)
+- **Test Events**: Pre-configured events in `events/` directory
+
+See [SAM Quick Start](docs/SAM_QUICK_START.md) for immediate setup or [SAM Debugging Guide](docs/SAM_LOCAL_DEBUGGING.md) for detailed documentation.
 
 ## Cost Optimization
 

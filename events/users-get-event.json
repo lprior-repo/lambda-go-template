@@ -1,0 +1,44 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /users",
+  "rawPath": "/users",
+  "rawQueryString": "limit=10&offset=0",
+  "headers": {
+    "accept": "application/json",
+    "accept-encoding": "gzip, deflate, br",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token",
+    "content-length": "0",
+    "host": "localhost:3000",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "x-forwarded-port": "3000",
+    "x-forwarded-proto": "http",
+    "x-request-id": "test-request-id-users-get",
+    "x-correlation-id": "corr-123456"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "1234567890",
+    "domainName": "localhost:3000",
+    "domainPrefix": "localhost",
+    "http": {
+      "method": "GET",
+      "path": "/users",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    },
+    "requestId": "test-request-id-users-get",
+    "routeKey": "GET /users",
+    "stage": "$default",
+    "time": "12/Mar/2025:19:05:30 +0000",
+    "timeEpoch": 1678651530456
+  },
+  "pathParameters": null,
+  "queryStringParameters": {
+    "limit": "10",
+    "offset": "0"
+  },
+  "body": null,
+  "isBase64Encoded": false
+}

@@ -1,0 +1,42 @@
+{
+  "Parameters": {
+    "hello": {
+      "ENVIRONMENT": "local-debug",
+      "LOG_LEVEL": "trace",
+      "USERS_TABLE_NAME": "lambda-go-template-dev-users",
+      "EVENT_BUS_NAME": "lambda-go-template-dev-events",
+      "AWS_REGION": "us-east-1",
+      "SERVICE_NAME": "lambda-go-template",
+      "SERVICE_VERSION": "debug",
+      "ENABLE_TRACING": "false",
+      "ENABLE_METRICS": "false",
+      "DEBUG_MODE": "true",
+      "TIMEOUT_MS": "300000"
+    },
+    "users": {
+      "ENVIRONMENT": "local-debug",
+      "LOG_LEVEL": "trace",
+      "USERS_TABLE_NAME": "lambda-go-template-dev-users",
+      "EVENT_BUS_NAME": "lambda-go-template-dev-events",
+      "AWS_REGION": "us-east-1",
+      "SERVICE_NAME": "lambda-go-template",
+      "SERVICE_VERSION": "debug",
+      "ENABLE_TRACING": "false",
+      "ENABLE_METRICS": "false",
+      "DEBUG_MODE": "true",
+      "TIMEOUT_MS": "300000"
+    },
+    "docs-generator": {
+      "ENVIRONMENT": "local-debug",
+      "LOG_LEVEL": "trace",
+      "API_DOCS_BUCKET": "lambda-go-template-dev-api-docs",
+      "AWS_REGION": "us-east-1",
+      "SERVICE_NAME": "lambda-go-template",
+      "SERVICE_VERSION": "debug",
+      "ENABLE_TRACING": "false",
+      "ENABLE_METRICS": "false",
+      "DEBUG_MODE": "true",
+      "TIMEOUT_MS": "300000"
+    }
+  }
+}

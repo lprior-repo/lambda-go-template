@@ -50,13 +50,32 @@ tasks:
       - build/hello
       - build/users
 
+  build:debug:
+    desc: Build Go Lambda functions with debug symbols for local debugging
+    deps: [deps]
+    cmds:
+      - echo "🔨 Building debug version for {{.GOOS}}/{{.GOARCH}}..."
+      - mkdir -p build
+      - cd src/hello && GOOS={{.GOOS}} GOARCH={{.GOARCH}} CGO_ENABLED=0 go build -gcflags="all=-N -l" -o bootstrap main.go
+      - cd src/hello && zip -r ../../build/hello.zip bootstrap && rm bootstrap
+      - cd src/users && GOOS={{.GOOS}} GOARCH={{.GOARCH}} CGO_ENABLED=0 go build -gcflags="all=-N -l" -o bootstrap main.go
+      - cd src/users && zip -r ../../build/users.zip bootstrap && rm bootstrap
+      - echo "✅ Debug builds created: build/hello.zip, build/users.zip"
+    sources:
+      - src/**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - build/hello.zip
+      - build/users.zip
+
   package:
     desc: Package Lambda functions for deployment
     deps: [build]
     cmds:
       - echo "📦 Packaging Lambda functions..."
-      - cd build && zip hello.zip hello
-      - cd build && zip users.zip users
+      - cd build && cp hello bootstrap && zip hello.zip bootstrap && rm bootstrap
+      - cd build && cp users bootstrap && zip users.zip bootstrap && rm bootstrap
       - echo "✅ Packages created: build/hello.zip, build/users.zip"
     sources:
       - build/hello
@@ -322,17 +341,111 @@ tasks:
       - go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
       - echo "🛠️ Development tools installed!"
 
-  dev:invoke:
-    desc: Invoke Lambda function locally using SAM
-    deps: [build]
+  # 🧪 SAM Local Development & Debugging
+  sam:build:
+    desc: Build SAM application from Terraform
+    deps: [build:debug]
+    dir: terraform
     cmds:
-      - |
-        echo "🧪 Invoking hello function locally..."
-        if command -v sam >/dev/null 2>&1; then
-          sam local invoke HelloFunction --event events/api-gateway-event.json
-        else
-          echo "⚠️  AWS SAM CLI not installed"
-        fi
+      - sam build --hook-name terraform --beta-features
+
+  sam:invoke:hello:
+    desc: Invoke hello function locally with SAM
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - sam local invoke aws_lambda_function.hello -e ../events/hello-event.json --beta-features
+
+  sam:invoke:users:
+    desc: Invoke users function locally with SAM
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - sam local invoke aws_lambda_function.users -e ../events/users-get-event.json --beta-features
+
+  sam:api:
+    desc: Start local API Gateway with SAM
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - echo "🚀 Starting local API Gateway on http://localhost:3000"
+      - echo "📋 Test endpoints:"
+      - echo "   curl http://localhost:3000/hello"
+      - echo "   curl http://localhost:3000/users"
+      - sam local start-api --hook-name terraform --beta-features --port 3000
+
+  sam:lambda:
+    desc: Start local Lambda service emulator
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - echo "🚀 Starting local Lambda service on http://localhost:3001"
+      - echo "📋 Invoke with AWS CLI:"
+      - echo "   aws lambda invoke --function-name aws_lambda_function.hello --endpoint-url http://127.0.0.1:3001/ --payload file://events/hello-event.json response.json"
+      - sam local start-lambda --hook-name terraform --beta-features
+
+  # 🐛 Debugging Tasks
+  debug:hello:
+    desc: Debug hello function with SAM (attach debugger on port 5986)
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - echo "🐛 Starting hello function in debug mode on port 5986"
+      - echo "📋 Attach debugger to localhost:5986"
+      - echo "📋 In VS Code: Run and Debug -> 'Debug Lambda Hello' -> F5"
+      - sam local invoke aws_lambda_function.hello -e ../events/hello-event.json --debug-port 5986 --beta-features
+
+  debug:users:
+    desc: Debug users function with SAM (attach debugger on port 5986)
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - echo "🐛 Starting users function in debug mode on port 5986"
+      - echo "📋 Attach debugger to localhost:5986"
+      - echo "📋 In VS Code: Run and Debug -> 'Debug Lambda Users' -> F5"
+      - sam local invoke aws_lambda_function.users -e ../events/users-get-event.json --debug-port 5986 --beta-features
+
+  debug:api:
+    desc: Debug API Gateway with SAM (attach debugger on port 5986)
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - echo "🐛 Starting API Gateway in debug mode on port 5986"
+      - echo "🚀 Local API: http://localhost:3000"
+      - echo "📋 Attach debugger to localhost:5986 before making requests"
+      - echo "📋 Test: curl http://localhost:3000/hello"
+      - sam local start-api --hook-name terraform --beta-features --debug-port 5986 --port 3000
+
+  # 🔧 SAM Utilities
+  sam:logs:
+    desc: Show SAM local execution logs
+    cmds:
+      - echo "📋 SAM local logs are displayed in the terminal where SAM is running"
+      - echo "💡 For verbose logging, add --debug flag to SAM commands"
+
+  sam:clean:
+    desc: Clean SAM build artifacts
+    dir: terraform
+    cmds:
+      - rm -rf .aws-sam/
+      - echo "🧹 SAM build artifacts cleaned"
+
+  sam:test:
+    desc: Run all SAM local tests
+    deps: [sam:build]
+    dir: terraform
+    cmds:
+      - echo "🧪 Testing hello function..."
+      - sam local invoke aws_lambda_function.hello -e ../events/hello-event.json --beta-features
+      - echo "🧪 Testing users GET..."
+      - sam local invoke aws_lambda_function.users -e ../events/users-get-event.json --beta-features
+      - echo "🧪 Testing users POST..."
+      - sam local invoke aws_lambda_function.users -e ../events/users-post-event.json --beta-features
+      - echo "✅ All SAM tests completed"
+
+  dev:invoke:
+    desc: Quick invoke hello function locally using SAM
+    deps: [sam:invoke:hello]
 
   api:docs:
     desc: Generate API documentation from OpenAPI spec
@@ -395,3 +508,19 @@ tasks:
       - echo "📚 Documentation generated successfully!"
       - echo "📊 Coverage report: coverage.html"
       - echo "📚 API docs: docs/api.html"
+      - echo "🧪 SAM debugging guide: docs/SAM_LOCAL_DEBUGGING.md"
+      - echo "⚡ SAM quick start: docs/SAM_QUICK_START.md"
+
+  # 🔍 Development Workflow
+  dev:workflow:
+    desc: Complete development workflow with SAM
+    cmds:
+      - echo "🚀 Starting complete development workflow..."
+      - task: build:debug
+      - task: sam:build
+      - task: sam:test
+      - echo "✅ Development workflow complete!"
+      - echo "💡 Next steps:"
+      - echo "   - Run 'task sam:api' to start local API"
+      - echo "   - Run 'task debug:hello' to debug functions"
+      - echo "   - Run 'task sam:invoke:hello' to test individual functions"

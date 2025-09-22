@@ -1,0 +1,42 @@
+{
+  "version": "2.0",
+  "routeKey": "POST /users",
+  "rawPath": "/users",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "application/json",
+    "accept-encoding": "gzip, deflate, br",
+    "accept-language": "en-US,en;q=0.9",
+    "authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token",
+    "content-length": "156",
+    "content-type": "application/json",
+    "host": "localhost:3000",
+    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "x-forwarded-port": "3000",
+    "x-forwarded-proto": "http",
+    "x-request-id": "test-request-id-users-post",
+    "x-correlation-id": "corr-789012"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "1234567890",
+    "domainName": "localhost:3000",
+    "domainPrefix": "localhost",
+    "http": {
+      "method": "POST",
+      "path": "/users",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    },
+    "requestId": "test-request-id-users-post",
+    "routeKey": "POST /users",
+    "stage": "$default",
+    "time": "12/Mar/2025:19:07:15 +0000",
+    "timeEpoch": 1678651635789
+  },
+  "pathParameters": null,
+  "queryStringParameters": null,
+  "body": "{\"name\":\"John Doe\",\"email\":\"john.doe@example.com\",\"department\":\"Engineering\",\"role\":\"Senior Developer\",\"preferences\":{\"notifications\":true,\"theme\":\"dark\"}}",
+  "isBase64Encoded": false
+}

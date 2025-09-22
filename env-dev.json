@@ -1,0 +1,36 @@
+{
+  "Parameters": {
+    "hello": {
+      "ENVIRONMENT": "local-dev",
+      "LOG_LEVEL": "debug",
+      "USERS_TABLE_NAME": "lambda-go-template-dev-users",
+      "EVENT_BUS_NAME": "lambda-go-template-dev-events",
+      "AWS_REGION": "us-east-1",
+      "SERVICE_NAME": "lambda-go-template",
+      "SERVICE_VERSION": "dev",
+      "ENABLE_TRACING": "true",
+      "ENABLE_METRICS": "true"
+    },
+    "users": {
+      "ENVIRONMENT": "local-dev",
+      "LOG_LEVEL": "debug",
+      "USERS_TABLE_NAME": "lambda-go-template-dev-users",
+      "EVENT_BUS_NAME": "lambda-go-template-dev-events",
+      "AWS_REGION": "us-east-1",
+      "SERVICE_NAME": "lambda-go-template",
+      "SERVICE_VERSION": "dev",
+      "ENABLE_TRACING": "true",
+      "ENABLE_METRICS": "true"
+    },
+    "docs-generator": {
+      "ENVIRONMENT": "local-dev",
+      "LOG_LEVEL": "debug",
+      "API_DOCS_BUCKET": "lambda-go-template-dev-api-docs",
+      "AWS_REGION": "us-east-1",
+      "SERVICE_NAME": "lambda-go-template",
+      "SERVICE_VERSION": "dev",
+      "ENABLE_TRACING": "true",
+      "ENABLE_METRICS": "true"
+    }
+  }
+}
