@@ -103,7 +103,7 @@ func (l *Logger) WithContext(ctx context.Context) *zap.Logger {
 
 // WithRequestID adds request ID to the logger context.
 func (l *Logger) WithRequestID(requestID string) *zap.Logger {
-	return l.Logger.With(zap.String("request_id", requestID))
+	return l.With(zap.String("request_id", requestID))
 }
 
 // WithError adds error information to the logger context.
@@ -111,7 +111,7 @@ func (l *Logger) WithError(err error) *zap.Logger {
 	if err == nil {
 		return l.Logger
 	}
-	return l.Logger.With(zap.Error(err))
+	return l.With(zap.Error(err))
 }
 
 // WithFields adds multiple fields to the logger context.
@@ -121,7 +121,7 @@ func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
 		zapFields = append(zapFields, zap.Any(key, value))
 	}
 	return &Logger{
-		Logger:      l.Logger.With(zapFields...),
+		Logger:      l.With(zapFields...),
 		serviceName: l.serviceName,
 		version:     l.version,
 	}
@@ -163,7 +163,7 @@ func (l *Logger) LogLambdaError(ctx context.Context, err error, msg string) {
 
 // Close flushes any buffered log entries.
 func (l *Logger) Close() error {
-	return l.Logger.Sync()
+	return l.Sync()
 }
 
 // SetGlobalLogger sets the global logger for the application.

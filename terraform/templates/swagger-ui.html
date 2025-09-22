@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${api_title} - API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui.css" />
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.10.3/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="https://unpkg.com/swagger-ui-dist@5.10.3/favicon-16x16.png" sizes="16x16" />
+    <style>
+        html {
+            box-sizing: border-box;
+            overflow: -moz-scrollbars-vertical;
+            overflow-y: scroll;
+        }
+
+        *, *:before, *:after {
+            box-sizing: inherit;
+        }
+
+        body {
+            margin: 0;
+            background: #fafafa;
+        }
+
+        .header {
+            background: #1976d2;
+            color: white;
+            padding: 20px 0;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-weight: 300;
+            font-size: 2.5em;
+        }
+
+        .header p {
+            margin: 10px 0 0 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .info-section {
+            max-width: 1200px;
+            margin: 0 auto 20px auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #1976d2;
+        }
+
+        .info-card h3 {
+            margin: 0 0 10px 0;
+            color: #1976d2;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        .info-card p {
+            margin: 0;
+            color: #666;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.5;
+        }
+
+        .endpoint-badge {
+            display: inline-block;
+            background: #4caf50;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin: 2px;
+            font-family: monospace;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .tech-badge {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        #swagger-ui {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Custom Swagger UI styling */
+        .swagger-ui .info .title {
+            color: #1976d2;
+        }
+
+        .swagger-ui .scheme-container {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .info-section {
+                margin: 0 10px 20px 10px;
+                padding: 15px;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>${api_title}</h1>
+        <p>Production-ready Go Lambda microservice with observability and best practices</p>
+    </div>
+
+    <div class="info-section">
+        <div class="info-grid">
+            <div class="info-card">
+                <h3>🚀 Live API Endpoints</h3>
+                <p>Base URL: <code>${api_gateway_url}</code></p>
+                <div style="margin-top: 10px;">
+                    <span class="endpoint-badge">GET /prod/hello</span>
+                    <span class="endpoint-badge">GET /prod/users</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>🛠 Technology Stack</h3>
+                <p</h3>>Built with modern serverless technologies:</p>
+                <div class="tech-stack">
+                    <span class="tech-badge">Go 1.21</span>
+                    <span class="tech-badge">AWS Lambda</span>
+                    <span class="tech-badge">API Gateway v2</span>
+                    <span class="tech-badge">DynamoDB</span>
+                    <span class="tech-badge">X-Ray Tracing</span>
+                    <span class="tech-badge">CloudWatch</span>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <h3>📊 Features</h3>
+                <p>Enterprise-grade features included:</p>
+                <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+                    <li>Structured logging & distributed tracing</li>
+                    <li>Type-safe configuration management</li>
+                    <li>Comprehensive error handling</li>
+                    <li>CORS & security headers</li>
+                    <li>ARM64 optimized performance</li>
+                </ul>
+            </div>
+
+            <div class="info-card">
+                <h3>🔧 Development</h3>
+                <p>Quick start commands:</p>
+                <div style="background: #263238; color: #fff; padding: 10px; border-radius: 4px; margin-top: 10px; font-family: monospace; font-size: 0.9em;">
+                    <div>curl ${api_gateway_url}/prod/hello</div>
+                    <div style="margin-top: 5px;">curl ${api_gateway_url}/prod/users</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; color: #666; font-size: 0.9em; border-top: 1px solid #eee; padding-top: 15px;">
+            📚 Interactive API documentation below •
+            <a href="${openapi_spec_url}" style="color: #1976d2; text-decoration: none;">Download OpenAPI Spec</a> •
+            <a href="openapi.json" style="color: #1976d2; text-decoration: none;">JSON Format</a>
+        </div>
+    </div>
+
+    <div id="swagger-ui"></div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.10.3/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            // Parse the current URL to get the base path
+            const baseUrl = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
+
+            // Build the API spec URL
+            const specUrl = baseUrl + '${openapi_spec_url}';
+
+            // Initialize Swagger UI
+            const ui = SwaggerUIBundle({
+                url: specUrl,
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                tryItOutEnabled: true,
+                requestInterceptor: function(request) {
+                    // Add CORS headers for API requests
+                    request.headers['Access-Control-Allow-Origin'] = '*';
+                    request.headers['X-Requested-With'] = 'Swagger-UI';
+                    return request;
+                },
+                onComplete: function() {
+                    console.log('Swagger UI loaded successfully');
+                },
+                onFailure: function(error) {
+                    console.error('Failed to load API spec:', error);
+
+                    // Show error message
+                    document.getElementById('swagger-ui').innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #666;">
+                            <h3>⚠️ Failed to load API specification</h3>
+                            <p>The OpenAPI specification could not be loaded from: <code>` + specUrl + `</code></p>
+                            <p>This might be due to CORS restrictions or the file not being available.</p>
+                            <p>Try accessing the <a href="` + specUrl + `" target="_blank">OpenAPI spec directly</a>.</p>
+                        </div>
+                    `;
+                },
+                // Customize the display
+                docExpansion: "list",
+                filter: false,
+                showExtensions: true,
+                showCommonExtensions: true,
+                defaultModelsExpandDepth: 2,
+                defaultModelExpandDepth: 2,
+                displayRequestDuration: true,
+                // Custom theme
+                syntaxHighlight: {
+                    theme: "agate"
+                }
+            });
+
+            // Add custom styling after load
+            setTimeout(function() {
+                // Add API status indicator
+                const infoSection = document.querySelector('.swagger-ui .info');
+                if (infoSection) {
+                    const statusIndicator = document.createElement('div');
+                    statusIndicator.style.cssText = 'background: #4caf50; color: white; padding: 8px 16px; border-radius: 20px; display: inline-block; margin: 10px 0; font-size: 0.9em; font-weight: 500;';
+                    statusIndicator.innerHTML = '🟢 API Status: Operational';
+                    infoSection.appendChild(statusIndicator);
+                }
+            }, 1000);
+        };
+    </script>
+</body>
+</html>

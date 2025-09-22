@@ -229,7 +229,7 @@ func (s *UsersService) processSingleUserRequest(ctx context.Context, userID, req
 }
 
 // ValidateUsersRequest validates the incoming request for users operations.
-func (s *UsersService) ValidateUsersRequest(ctx context.Context, request events.APIGatewayV2HTTPRequest) error {
+func (s *UsersService) ValidateUsersRequest(_ context.Context, request events.APIGatewayV2HTTPRequest) error {
 	// Validate HTTP method
 	if request.RequestContext.HTTP.Method != "GET" {
 		return lambda.NewValidationError("only GET method is allowed for users endpoint", "httpMethod", request.RequestContext.HTTP.Method)

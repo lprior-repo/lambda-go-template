@@ -543,25 +543,10 @@ func TestErrorHandling(t *testing.T) {
 
 // Helper functions for validation
 
-func validateCORSHeaders(t *testing.T, resp *http.Response) {
-	// Note: For API Gateway v2 HTTP API, CORS is configured at the API level
-	// and may not appear in individual response headers
-	origin := resp.Header.Get("Access-Control-Allow-Origin")
-	if origin != "" {
-		assert.Equal(t, "*", origin)
-	}
-}
-
 func validateCacheHeaders(t *testing.T, resp *http.Response) {
 	cacheControl := resp.Header.Get("Cache-Control")
 	assert.NotEmpty(t, cacheControl)
 	assert.Contains(t, cacheControl, "max-age")
-}
-
-func validateSecurityHeaders(t *testing.T, resp *http.Response) {
-	// Check for common security headers if implemented
-	contentType := resp.Header.Get("Content-Type")
-	assert.Contains(t, contentType, "application/json")
 }
 
 // Integration test setup and teardown

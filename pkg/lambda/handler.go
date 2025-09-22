@@ -15,6 +15,15 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 )
 
+// Context key types to avoid collisions
+type contextKey string
+
+const (
+	contextKeyParsedBody contextKey = "parsed_body"
+	contextKeyRequestID  contextKey = "request_id"
+	contextKeyTimestamp  contextKey = "timestamp"
+)
+
 // Handler represents a Lambda function handler with observability and error handling.
 type Handler struct {
 	config *config.Config
@@ -510,7 +519,7 @@ func (h *Handler) JSONParsingMiddleware() MiddlewareFunc {
 				}
 
 				// Add parsed body to context
-				ctx = context.WithValue(ctx, "parsed_body", parsedBody)
+				ctx = context.WithValue(ctx, contextKeyParsedBody, parsedBody)
 			}
 
 			return next(ctx, request)
@@ -520,8 +529,8 @@ func (h *Handler) JSONParsingMiddleware() MiddlewareFunc {
 
 // GetParsedBody retrieves the parsed JSON body from context.
 func GetParsedBody(ctx context.Context) (interface{}, bool) {
-	body, ok := ctx.Value("parsed_body").(interface{})
-	return body, ok
+	body := ctx.Value(contextKeyParsedBody)
+	return body, body != nil
 }
 
 // GetRequestID retrieves the request ID from Lambda context.
@@ -539,7 +548,7 @@ func GetLambdaContext(ctx context.Context) (*lambdacontext.LambdaContext, bool) 
 
 // CreateContext creates a new context with common values.
 func CreateContext(baseCtx context.Context, requestID string) context.Context {
-	ctx := context.WithValue(baseCtx, "request_id", requestID)
-	ctx = context.WithValue(ctx, "timestamp", time.Now())
+	ctx := context.WithValue(baseCtx, contextKeyRequestID, requestID)
+	ctx = context.WithValue(ctx, contextKeyTimestamp, time.Now())
 	return ctx
 }

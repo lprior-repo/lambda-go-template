@@ -16,13 +16,13 @@ import (
 func TestHelloService_ProcessHelloRequest(t *testing.T) {
 	tests := []struct {
 		name        string
-		request     events.APIGatewayProxyRequest
+		request     events.APIGatewayV2HTTPRequest
 		expectError bool
 		validate    func(*testing.T, *HelloResponse)
 	}{
 		{
 			name:        "should process valid GET request",
-			request:     testutil.CreateTestAPIGatewayRequest("GET", "/hello"),
+			request:     testutil.CreateTestAPIGatewayV2Request("GET", "/hello"),
 			expectError: false,
 			validate: func(t *testing.T, response *HelloResponse) {
 				assert.Equal(t, "Hello from Lambda with observability!", response.Message)
@@ -41,7 +41,7 @@ func TestHelloService_ProcessHelloRequest(t *testing.T) {
 		},
 		{
 			name:        "should process valid POST request",
-			request:     testutil.CreateTestAPIGatewayRequest("POST", "/hello"),
+			request:     testutil.CreateTestAPIGatewayV2Request("POST", "/hello"),
 			expectError: false,
 			validate: func(t *testing.T, response *HelloResponse) {
 				assert.Equal(t, "Hello from Lambda with observability!", response.Message)
@@ -51,7 +51,7 @@ func TestHelloService_ProcessHelloRequest(t *testing.T) {
 		},
 		{
 			name:        "should process request with different path",
-			request:     testutil.CreateTestAPIGatewayRequest("GET", "/api/hello"),
+			request:     testutil.CreateTestAPIGatewayV2Request("GET", "/api/hello"),
 			expectError: false,
 			validate: func(t *testing.T, response *HelloResponse) {
 				assert.Equal(t, "/api/hello", response.Path)
@@ -60,7 +60,7 @@ func TestHelloService_ProcessHelloRequest(t *testing.T) {
 		},
 		{
 			name:        "should handle request with query parameters",
-			request:     testutil.CreateTestAPIGatewayRequestWithQuery("GET", "/hello", map[string]string{"name": "world"}),
+			request:     testutil.CreateTestAPIGatewayV2RequestWithQuery("GET", "/hello", map[string]string{"name": "world"}),
 			expectError: false,
 			validate: func(t *testing.T, response *HelloResponse) {
 				assert.Equal(t, "/hello", response.Path)
@@ -104,22 +104,22 @@ func TestHelloService_ProcessHelloRequest(t *testing.T) {
 func TestCreateHandler(t *testing.T) {
 	tests := []struct {
 		name        string
-		request     events.APIGatewayProxyRequest
+		request     events.APIGatewayV2HTTPRequest
 		expectError bool
 	}{
 		{
 			name:        "should handle valid request",
-			request:     testutil.CreateTestAPIGatewayRequest("GET", "/hello"),
+			request:     testutil.CreateTestAPIGatewayV2Request("GET", "/hello"),
 			expectError: false,
 		},
 		{
 			name:        "should handle POST request",
-			request:     testutil.CreateTestAPIGatewayRequest("POST", "/hello"),
+			request:     testutil.CreateTestAPIGatewayV2Request("POST", "/hello"),
 			expectError: false,
 		},
 		{
 			name:        "should handle request with body",
-			request:     testutil.CreateTestAPIGatewayRequestWithBody("POST", "/hello", map[string]string{"test": "data"}),
+			request:     testutil.CreateTestAPIGatewayV2RequestWithBody("POST", "/hello", map[string]string{"test": "data"}),
 			expectError: false,
 		},
 	}
@@ -152,7 +152,7 @@ func TestCreateHandler(t *testing.T) {
 				require.True(t, ok, "Result should be a HelloResponse")
 
 				assert.Equal(t, "Hello from Lambda with observability!", response.Message)
-				assert.Equal(t, tt.request.Path, response.Path)
+				assert.Equal(t, tt.request.RawPath, response.Path)
 				assert.Equal(t, "test", response.Environment)
 				assert.Equal(t, "test-request-456", response.RequestID)
 			}
@@ -164,13 +164,13 @@ func TestMainIntegration(t *testing.T) {
 	// Test the complete Lambda handler with middleware
 	tests := []struct {
 		name               string
-		request            events.APIGatewayProxyRequest
+		request            events.APIGatewayV2HTTPRequest
 		expectedStatusCode int
 		validateResponse   func(*testing.T, string)
 	}{
 		{
 			name:               "should return 200 for valid GET request",
-			request:            testutil.CreateTestAPIGatewayRequest("GET", "/hello"),
+			request:            testutil.CreateTestAPIGatewayV2Request("GET", "/hello"),
 			expectedStatusCode: 200,
 			validateResponse: func(t *testing.T, body string) {
 				testutil.AssertValidJSONResponse(t, body)
@@ -179,7 +179,7 @@ func TestMainIntegration(t *testing.T) {
 		},
 		{
 			name:               "should return 200 for valid POST request",
-			request:            testutil.CreateTestAPIGatewayRequest("POST", "/hello"),
+			request:            testutil.CreateTestAPIGatewayV2Request("POST", "/hello"),
 			expectedStatusCode: 200,
 			validateResponse: func(t *testing.T, body string) {
 				testutil.AssertValidJSONResponse(t, body)
@@ -188,7 +188,7 @@ func TestMainIntegration(t *testing.T) {
 		},
 		{
 			name:               "should return 400 for invalid HTTP method",
-			request:            testutil.CreateTestAPIGatewayRequest("INVALID", "/hello"),
+			request:            testutil.CreateTestAPIGatewayV2Request("INVALID", "/hello"),
 			expectedStatusCode: 400,
 			validateResponse: func(t *testing.T, body string) {
 				testutil.AssertValidJSONResponse(t, body)
@@ -197,8 +197,8 @@ func TestMainIntegration(t *testing.T) {
 		},
 		{
 			name: "should return 400 for invalid content type",
-			request: func() events.APIGatewayProxyRequest {
-				req := testutil.CreateTestAPIGatewayRequestWithHeaders("POST", "/hello", map[string]string{
+			request: func() events.APIGatewayV2HTTPRequest {
+				req := testutil.CreateTestAPIGatewayV2RequestWithHeaders("POST", "/hello", map[string]string{
 					"Content-Type": "text/plain",
 				})
 				req.Body = `{"test": "data"}`
@@ -233,11 +233,11 @@ func TestMainIntegration(t *testing.T) {
 			handler := lambda.NewHandler(cfg, logger, tracer)
 			businessHandler := CreateHandler(cfg, logger, tracer)
 
-			wrappedHandler := handler.Wrap(
+			wrappedHandler := handler.WrapV2(
 				businessHandler,
-				handler.ValidationMiddleware(),
-				handler.LoggingMiddleware(),
-				handler.TracingMiddleware(),
+				handler.ValidationMiddlewareV2(),
+				handler.LoggingMiddlewareV2(),
+				handler.TracingMiddlewareV2(),
 			)
 
 			// Create test context
@@ -326,7 +326,7 @@ func BenchmarkHelloService_ProcessHelloRequest(b *testing.B) {
 	tracer := testutil.TestTracer()
 	service := NewHelloService(cfg, logger, tracer)
 
-	request := testutil.CreateTestAPIGatewayRequest("GET", "/hello")
+	request := testutil.CreateTestAPIGatewayV2Request("GET", "/hello")
 	ctx := testutil.CreateTestContext("bench-request")
 
 	b.ResetTimer()
@@ -346,7 +346,7 @@ func BenchmarkCreateHandler(b *testing.B) {
 	tracer := testutil.TestTracer()
 	handler := CreateHandler(cfg, logger, tracer)
 
-	request := testutil.CreateTestAPIGatewayRequest("GET", "/hello")
+	request := testutil.CreateTestAPIGatewayV2Request("GET", "/hello")
 	ctx := testutil.CreateTestContext("bench-request")
 
 	b.ResetTimer()

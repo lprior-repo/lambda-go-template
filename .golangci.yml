@@ -1,6 +1,12 @@
+version: 2
+
 run:
   timeout: 5m
-  modules-download-mode: readonly
+  tests: true
+  skip-dirs:
+    - vendor
+    - .terraform
+    - build
 
 output:
   format: colored-line-number
@@ -10,14 +16,12 @@ output:
 linters-settings:
   errcheck:
     check-type-assertions: true
-    exclude-functions:
-      - "(*github.com/aws/aws-xray-sdk-go/xray.Segment).Close"
-      - "(*github.com/aws/aws-xray-sdk-go/xray.Segment).AddAnnotation"
-      - "(*github.com/aws/aws-xray-sdk-go/xray.Segment).AddMetadata"
-      - "(*github.com/aws/aws-xray-sdk-go/xray.Segment).AddError"
+    check-blank: true
+
   goconst:
     min-len: 2
     min-occurrences: 3
+
   gocritic:
     enabled-tags:
       - diagnostic
@@ -25,24 +29,38 @@ linters-settings:
       - opinionated
       - performance
       - style
+
   gocyclo:
     min-complexity: 15
-  goimports:
-    local-prefixes: lambda-go-template
+
   govet:
     shadow: true
+
   lll:
     line-length: 140
+
   misspell:
     locale: US
+
   revive:
     confidence: 0.8
+    rules:
+      - name: exported
+        severity: error
+      - name: unreachable-code
+        severity: error
+      - name: redefines-builtin-id
+        severity: error
+
   depguard:
     rules:
       main:
         deny:
           - pkg: "github.com/sirupsen/logrus"
             desc: "Use go.uber.org/zap for logging instead"
+        files:
+          - "src/**/*.go"
+          - "!**/*_test.go"
 
 linters:
   disable-all: true
@@ -54,59 +72,39 @@ linters:
     - goconst
     - gocritic
     - gocyclo
-    - gofmt
-    - goimports
-    - revive
-    - goprintffuncname
-    - gosec
-    - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
     - nakedret
     - prealloc
+    - revive
     - staticcheck
-    - stylecheck
-    - typecheck
     - unconvert
     - unparam
     - unused
     - whitespace
 
 issues:
+  exclude-use-default: false
   exclude-rules:
     # Allow test files to be less strict
     - path: _test\.go
       linters:
         - gocyclo
         - errcheck
-        - dupl
-        - gosec
         - lll
-        - gochecknoinits
-    # Ignore "G404: Use of weak random number generator" in test files
-    - path: _test\.go
-      text: "G404:"
-    # Ignore certain govet reports
+
+    # Ignore certain govet reports that are acceptable
     - linters:
         - govet
       text: 'declaration of "(err|ctx)" shadows declaration at'
-    # Allow init functions in main.go files for logger setup
-    - path: main\.go
+
+    # Ignore G404 (weak random) in test files
+    - path: _test\.go
+      text: "G404:"
+
+    # Ignore line length in long URLs or import blocks
+    - source: "https?://"
       linters:
-        - gochecknoinits
-      text: "don't use `init` function"
-    # Ignore errcheck for X-Ray operations that don't need error handling
-    - source: "seg\\.Close\\(nil\\)"
-      linters:
-        - errcheck
-    - source: "seg\\.AddAnnotation"
-      linters:
-        - errcheck
-    - source: "seg\\.AddMetadata"
-      linters:
-        - errcheck
-    - source: "seg\\.AddError"
-      linters:
-        - errcheck
+        - lll
