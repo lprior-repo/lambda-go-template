@@ -4,6 +4,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "project_name" {
+  description = "Name of the project"
+  type        = string
+  default     = "lambda-go-template"
+}
+
 variable "function_name" {
   description = "Base name for Lambda functions"
   type        = string
@@ -26,3 +32,26 @@ variable "namespace" {
   }
 }
 
+variable "is_ephemeral" {
+  description = "Whether this is an ephemeral environment (for testing/development)"
+  type        = bool
+  default     = false
+}
+
+variable "github_org" {
+  description = "GitHub organization name (for OIDC setup)"
+  type        = string
+  default     = ""
+}
+
+variable "github_repo" {
+  description = "GitHub repository name (for OIDC setup)"
+  type        = string
+  default     = ""
+}
+
+variable "create_oidc_provider" {
+  description = "Whether to create GitHub OIDC provider"
+  type        = bool
+  default     = false
+}

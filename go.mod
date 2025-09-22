@@ -5,6 +5,8 @@ go 1.23
 require (
 	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-xray-sdk-go v1.8.5
+	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/stretchr/testify v1.9.0
 	go.uber.org/zap v1.27.0
 )
 
@@ -16,8 +18,6 @@ require (
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.52.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect

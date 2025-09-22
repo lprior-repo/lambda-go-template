@@ -2,191 +2,151 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
 	"time"
 
+	"lambda-go-template/pkg/config"
+	"lambda-go-template/pkg/lambda"
+	"lambda-go-template/pkg/observability"
+
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
+	awslambda "github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-lambda-go/lambdacontext"
-	"github.com/aws/aws-xray-sdk-go/xray"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
+// HelloResponse represents the response structure for the hello endpoint.
 type HelloResponse struct {
 	Message     string `json:"message"`
 	Path        string `json:"path"`
 	Timestamp   string `json:"timestamp"`
 	Environment string `json:"environment"`
 	RequestID   string `json:"requestId"`
+	Version     string `json:"version"`
 }
 
-type Response struct {
-	StatusCode int               `json:"statusCode"`
-	Headers    map[string]string `json:"headers"`
-	Body       string            `json:"body"`
+// HelloService handles the business logic for hello operations.
+type HelloService struct {
+	config *config.Config
+	logger *observability.Logger
+	tracer *observability.Tracer
 }
 
-var logger *zap.Logger
-
-func init() {
-	// Configure structured logging
-	config := zap.NewProductionConfig()
-	config.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
-	config.OutputPaths = []string{"stdout"}
-	config.ErrorOutputPaths = []string{"stderr"}
-
-	// Add service name to all logs
-	config.InitialFields = map[string]interface{}{
-		"service": "hello-service",
-		"version": "1.0.0",
-	}
-
-	var err error
-	logger, err = config.Build()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+// NewHelloService creates a new hello service instance.
+func NewHelloService(cfg *config.Config, logger *observability.Logger, tracer *observability.Tracer) *HelloService {
+	return &HelloService{
+		config: cfg,
+		logger: logger,
+		tracer: tracer,
 	}
 }
 
-func processHelloRequest(ctx context.Context, request events.APIGatewayProxyRequest) (*HelloResponse, error) {
+// ProcessHelloRequest processes a hello request and returns the response data.
+func (s *HelloService) ProcessHelloRequest(ctx context.Context, request events.APIGatewayV2HTTPRequest) (*HelloResponse, error) {
+	// Add business logic tracing
+	ctx, seg := s.tracer.StartSubsegment(ctx, "processHelloRequest")
+	defer s.tracer.Close(seg, nil)
+
 	// Get Lambda context for request ID
 	lc, _ := lambdacontext.FromContext(ctx)
-
-	// Add tracing subsegment (only in AWS Lambda environment)
-	var seg *xray.Segment
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		_, seg = xray.BeginSubsegment(ctx, "processHelloRequest")
-		defer seg.Close(nil)
-
-		// Add tracing annotations
-		seg.AddAnnotation("path", request.Path)
-		seg.AddAnnotation("httpMethod", request.HTTPMethod)
+	requestID := ""
+	if lc != nil {
+		requestID = lc.AwsRequestID
 	}
 
-	// Log structured information
-	logger.Info("Processing hello request",
-		zap.String("path", request.Path),
-		zap.String("httpMethod", request.HTTPMethod),
-		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
-		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
-	)
+	// Add tracing annotations
+	s.tracer.AddAnnotation(ctx, "path", request.RawPath)
+	s.tracer.AddAnnotation(ctx, "httpMethod", request.RequestContext.HTTP.Method)
 
-	// Simulate business processing
-	time.Sleep(50 * time.Millisecond)
+	// Log structured information about the request processing
+	s.logger.WithFields(map[string]interface{}{
+		"path":       request.RawPath,
+		"httpMethod": request.RequestContext.HTTP.Method,
+		"requestId":  requestID,
+	}).Info("Processing hello request")
 
+	// Simulate business processing (in real world, this might be database calls, etc.)
+	err := s.tracer.WithTimer(ctx, "simulate_processing", func(ctx context.Context) error {
+		time.Sleep(50 * time.Millisecond)
+		return nil
+	})
+	if err != nil {
+		return nil, lambda.NewInternalErrorWithOperation("hello processing", "failed to simulate processing", err)
+	}
+
+	// Create response
 	response := &HelloResponse{
 		Message:     "Hello from Lambda with observability!",
-		Path:        request.Path,
+		Path:        request.RawPath,
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
-		Environment: os.Getenv("ENVIRONMENT"),
-		RequestID:   lc.AwsRequestID,
+		Environment: s.config.Environment,
+		RequestID:   requestID,
+		Version:     s.config.ServiceVersion,
 	}
 
-	// Add response to tracing metadata (only if tracing is enabled)
-	responseData, _ := json.Marshal(response)
-	if seg != nil {
-		seg.AddMetadata("response", string(responseData))
-	}
+	// Add response metadata to tracing
+	s.tracer.AddMetadata(ctx, "response", map[string]interface{}{
+		"message":     response.Message,
+		"environment": response.Environment,
+	})
 
-	logger.Info("Hello request processed successfully",
-		zap.String("requestId", lc.AwsRequestID),
-		zap.Int("responseSize", len(responseData)),
-	)
+	s.logger.WithFields(map[string]interface{}{
+		"requestId":   requestID,
+		"environment": response.Environment,
+		"version":     response.Version,
+	}).Info("Hello request processed successfully")
 
 	return response, nil
 }
 
-func createResponseHeaders(requestID string) map[string]string {
-	return map[string]string{
-		"Content-Type":                     "application/json",
-		"Access-Control-Allow-Origin":      "*",
-		"Access-Control-Allow-Headers":     "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-		"Access-Control-Allow-Methods":     "OPTIONS,POST,GET",
-		"X-Request-ID":                     requestID,
-		"Cache-Control":                    "max-age=300",
+// CreateHandler creates the Lambda handler function.
+func CreateHandler(cfg *config.Config, logger *observability.Logger, tracer *observability.Tracer) func(context.Context, events.APIGatewayV2HTTPRequest) (interface{}, error) {
+	service := NewHelloService(cfg, logger, tracer)
+
+	return func(ctx context.Context, request events.APIGatewayV2HTTPRequest) (interface{}, error) {
+		return service.ProcessHelloRequest(ctx, request)
 	}
-}
-
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (Response, error) {
-	// Get Lambda context
-	lc, _ := lambdacontext.FromContext(ctx)
-
-	// Create tracing segment (only in AWS Lambda environment)
-	var seg *xray.Segment
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		ctx, seg = xray.BeginSegment(ctx, "hello-lambda")
-		defer seg.Close(nil)
-
-		// Add correlation ID for tracing
-		seg.AddAnnotation("correlationId", lc.AwsRequestID)
-	}
-
-	logger.Info("Lambda invocation started",
-		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
-		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
-	)
-
-	// Process the request
-	responseData, err := processHelloRequest(ctx, request)
-	if err != nil {
-		logger.Error("Failed to process hello request",
-			zap.Error(err),
-			zap.String("requestId", lc.AwsRequestID),
-		)
-
-		// Add error to tracing (only if tracing is enabled)
-		if seg != nil {
-			seg.AddError(err)
-		}
-
-		// Create error response
-		errorResponse := map[string]interface{}{
-			"message":   "Internal server error",
-			"requestId": lc.AwsRequestID,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		}
-
-		errorBody, _ := json.Marshal(errorResponse)
-		return Response{
-			StatusCode: 500,
-			Headers:    createResponseHeaders(lc.AwsRequestID),
-			Body:       string(errorBody),
-		}, nil
-	}
-
-	// Marshal response
-	responseBody, err := json.Marshal(responseData)
-	if err != nil {
-		logger.Error("Failed to marshal response",
-			zap.Error(err),
-			zap.String("requestId", lc.AwsRequestID),
-		)
-
-		return Response{
-			StatusCode: 500,
-			Headers:    createResponseHeaders(lc.AwsRequestID),
-			Body:       `{"error": "Internal server error"}`,
-		}, nil
-	}
-
-	response := Response{
-		StatusCode: 200,
-		Headers:    createResponseHeaders(lc.AwsRequestID),
-		Body:       string(responseBody),
-	}
-
-	logger.Info("Lambda invocation completed successfully",
-		zap.String("requestId", lc.AwsRequestID),
-	)
-
-	return response, nil
 }
 
 func main() {
-	lambda.Start(handler)
+	// Load configuration
+	cfg := config.MustLoad()
+
+	// Initialize logger
+	logger := observability.MustNewLogger(cfg)
+	defer logger.Close()
+
+	// Set global logger for packages that need it
+	observability.SetGlobalLogger(logger)
+
+	// Initialize tracer
+	tracer := observability.NewTracer(observability.TracingConfig{
+		Enabled:     cfg.EnableTracing,
+		ServiceName: cfg.ServiceName,
+		Version:     cfg.ServiceVersion,
+	})
+
+	// Create Lambda handler with middleware
+	handler := lambda.NewHandler(cfg, logger, tracer)
+
+	// Create the business logic handler
+	businessHandler := CreateHandler(cfg, logger, tracer)
+
+	// Wrap with middleware
+	wrappedHandler := handler.WrapV2(
+		businessHandler,
+		handler.ValidationMiddlewareV2(),
+		handler.LoggingMiddlewareV2(),
+		handler.TracingMiddlewareV2(),
+		handler.TimeoutMiddlewareV2(),
+	)
+
+	logger.WithFields(map[string]interface{}{
+		"service":     cfg.ServiceName,
+		"version":     cfg.ServiceVersion,
+		"environment": cfg.Environment,
+		"tracing":     cfg.EnableTracing,
+		"metrics":     cfg.EnableMetrics,
+	}).Info("Starting hello Lambda function")
+
+	// Start Lambda
+	awslambda.Start(wrappedHandler)
 }

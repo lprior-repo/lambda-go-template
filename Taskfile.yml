@@ -7,7 +7,7 @@ vars:
   PROJECT_NAME: lambda-go-template
   AWS_REGION: us-east-1
   ENVIRONMENT: dev
-  GO_VERSION: 1.23
+  GO_VERSION: 1.21
   GOOS: linux
   GOARCH: arm64
 
@@ -38,29 +38,29 @@ tasks:
     deps: [deps]
     cmds:
       - echo "🔨 Building for {{.GOOS}}/{{.GOARCH}}..."
-      - mkdir -p build/hello build/users
-      - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -ldflags="-s -w" -o build/hello/bootstrap src/hello/main.go
-      - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -ldflags="-s -w" -o build/users/bootstrap src/users/main.go
-      - chmod +x build/hello/bootstrap build/users/bootstrap
+      - mkdir -p build
+      - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -ldflags="-s -w" -o build/hello src/hello/main.go
+      - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -ldflags="-s -w" -o build/users src/users/main.go
+      - chmod +x build/hello build/users
     sources:
       - src/**/*.go
       - go.mod
       - go.sum
     generates:
-      - build/hello/bootstrap
-      - build/users/bootstrap
+      - build/hello
+      - build/users
 
   package:
     desc: Package Lambda functions for deployment
     deps: [build]
     cmds:
       - echo "📦 Packaging Lambda functions..."
-      - cd build/hello && zip ../hello.zip bootstrap
-      - cd build/users && zip ../users.zip bootstrap
+      - cd build && zip hello.zip hello
+      - cd build && zip users.zip users
       - echo "✅ Packages created: build/hello.zip, build/users.zip"
     sources:
-      - build/hello/bootstrap
-      - build/users/bootstrap
+      - build/hello
+      - build/users
     generates:
       - build/*.zip
 

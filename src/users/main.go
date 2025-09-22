@@ -2,19 +2,18 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
 	"time"
 
+	"lambda-go-template/pkg/config"
+	"lambda-go-template/pkg/lambda"
+	"lambda-go-template/pkg/observability"
+
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
+	awslambda "github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-lambda-go/lambdacontext"
-	"github.com/aws/aws-xray-sdk-go/xray"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
+// User represents a user entity.
 type User struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
@@ -22,225 +21,303 @@ type User struct {
 	CreatedAt string `json:"createdAt"`
 }
 
+// UsersResponse represents the response structure for the users endpoint.
 type UsersResponse struct {
 	Users     []User `json:"users"`
 	Count     int    `json:"count"`
 	Timestamp string `json:"timestamp"`
 	RequestID string `json:"requestId"`
+	Version   string `json:"version"`
 }
 
-type Response struct {
-	StatusCode int               `json:"statusCode"`
-	Headers    map[string]string `json:"headers"`
-	Body       string            `json:"body"`
+// UserRepository defines the interface for user data access.
+type UserRepository interface {
+	GetUsers(ctx context.Context) ([]User, error)
+	GetUserByID(ctx context.Context, id string) (*User, error)
 }
 
-var logger *zap.Logger
+// MockUserRepository provides a mock implementation for testing and development.
+type MockUserRepository struct {
+	users []User
+}
 
-func init() {
-	// Configure structured logging
-	config := zap.NewProductionConfig()
-	config.Level = zap.NewAtomicLevelAt(zapcore.InfoLevel)
-	config.OutputPaths = []string{"stdout"}
-	config.ErrorOutputPaths = []string{"stderr"}
-
-	// Add service name to all logs
-	config.InitialFields = map[string]interface{}{
-		"service": "users-service",
-		"version": "1.0.0",
-	}
-
-	var err error
-	logger, err = config.Build()
-	if err != nil {
-		panic(fmt.Sprintf("Failed to initialize logger: %v", err))
+// NewMockUserRepository creates a new mock user repository with sample data.
+func NewMockUserRepository() *MockUserRepository {
+	return &MockUserRepository{
+		users: []User{
+			{
+				ID:        "1",
+				Name:      "John Doe",
+				Email:     "john@example.com",
+				CreatedAt: "2024-01-15T10:30:00Z",
+			},
+			{
+				ID:        "2",
+				Name:      "Jane Smith",
+				Email:     "jane@example.com",
+				CreatedAt: "2024-01-16T14:45:00Z",
+			},
+			{
+				ID:        "3",
+				Name:      "Alice Johnson",
+				Email:     "alice@example.com",
+				CreatedAt: "2024-01-17T09:15:00Z",
+			},
+		},
 	}
 }
 
-func getUsersFromDatabase(ctx context.Context) ([]User, error) {
-	// Add tracing subsegment (only in AWS Lambda environment)
-	var seg *xray.Segment
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		_, seg = xray.BeginSubsegment(ctx, "getUsersFromDatabase")
-		defer seg.Close(nil)
-	}
-
+// GetUsers retrieves all users from the mock repository.
+func (r *MockUserRepository) GetUsers(ctx context.Context) ([]User, error) {
 	// Simulate database latency
 	time.Sleep(50 * time.Millisecond)
-
-	// Mock users data - in real implementation, you'd fetch from DynamoDB
-	users := []User{
-		{
-			ID:        "1",
-			Name:      "John Doe",
-			Email:     "john@example.com",
-			CreatedAt: "2024-01-15T10:30:00Z",
-		},
-		{
-			ID:        "2",
-			Name:      "Jane Smith",
-			Email:     "jane@example.com",
-			CreatedAt: "2024-01-16T14:45:00Z",
-		},
-		{
-			ID:        "3",
-			Name:      "Alice Johnson",
-			Email:     "alice@example.com",
-			CreatedAt: "2024-01-17T09:15:00Z",
-		},
-	}
-
-	// Add tracing annotation (only if tracing is enabled)
-	if seg != nil {
-		seg.AddAnnotation("userCount", len(users))
-	}
-
-	logger.Info("Users retrieved from database",
-		zap.Int("userCount", len(users)),
-	)
-
-	return users, nil
+	return r.users, nil
 }
 
-func processUsersRequest(ctx context.Context, request events.APIGatewayProxyRequest) (*UsersResponse, error) {
+// GetUserByID retrieves a user by ID from the mock repository.
+func (r *MockUserRepository) GetUserByID(ctx context.Context, id string) (*User, error) {
+	// Simulate database latency
+	time.Sleep(25 * time.Millisecond)
+
+	for _, user := range r.users {
+		if user.ID == id {
+			return &user, nil
+		}
+	}
+
+	return nil, lambda.NewResourceNotFoundError("user", id, "user not found")
+}
+
+// UsersService handles the business logic for user operations.
+type UsersService struct {
+	config     *config.Config
+	logger     *observability.Logger
+	tracer     *observability.Tracer
+	repository UserRepository
+}
+
+// NewUsersService creates a new users service instance.
+func NewUsersService(cfg *config.Config, logger *observability.Logger, tracer *observability.Tracer, repo UserRepository) *UsersService {
+	return &UsersService{
+		config:     cfg,
+		logger:     logger,
+		tracer:     tracer,
+		repository: repo,
+	}
+}
+
+// ProcessUsersRequest processes a users list request and returns the response data.
+func (s *UsersService) ProcessUsersRequest(ctx context.Context, request events.APIGatewayV2HTTPRequest) (*UsersResponse, error) {
+	// Add business logic tracing
+	ctx, seg := s.tracer.StartSubsegment(ctx, "processUsersRequest")
+	defer s.tracer.Close(seg, nil)
+
 	// Get Lambda context for request ID
 	lc, _ := lambdacontext.FromContext(ctx)
-
-	// Add tracing subsegment (only in AWS Lambda environment)
-	var seg *xray.Segment
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		_, seg = xray.BeginSubsegment(ctx, "processUsersRequest")
-		defer seg.Close(nil)
-
-		// Add tracing annotations
-		seg.AddAnnotation("path", request.Path)
-		seg.AddAnnotation("httpMethod", request.HTTPMethod)
+	requestID := ""
+	if lc != nil {
+		requestID = lc.AwsRequestID
 	}
 
-	// Log structured information
-	logger.Info("Processing users request",
-		zap.String("path", request.Path),
-		zap.String("httpMethod", request.HTTPMethod),
-		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
-		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
-	)
+	// Add tracing annotations
+	s.tracer.AddAnnotation(ctx, "path", request.RawPath)
+	s.tracer.AddAnnotation(ctx, "httpMethod", request.RequestContext.HTTP.Method)
 
-	// Fetch users data
-	users, err := getUsersFromDatabase(ctx)
+	// Log structured information about the request processing
+	s.logger.WithFields(map[string]interface{}{
+		"path":       request.RawPath,
+		"httpMethod": request.RequestContext.HTTP.Method,
+		"requestId":  requestID,
+	}).Info("Processing users request")
+
+	// Check if this is a request for a specific user
+	userID := request.PathParameters["id"]
+	if userID != "" {
+		return s.processSingleUserRequest(ctx, userID, requestID)
+	}
+
+	// Fetch all users data
+	var allUsers []User
+	err := s.tracer.WithTimer(ctx, "getUsersFromDatabase", func(ctx context.Context) error {
+		var fetchErr error
+		allUsers, fetchErr = s.repository.GetUsers(ctx)
+		if fetchErr != nil {
+			return lambda.NewInternalErrorWithOperation("database query", "failed to fetch users", fetchErr)
+		}
+
+		// Add tracing annotation for user count
+		s.tracer.AddAnnotation(ctx, "userCount", len(allUsers))
+
+		s.logger.WithFields(map[string]interface{}{
+			"userCount": len(allUsers),
+		}).Info("Users retrieved from database")
+
+		return nil
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to get users from database: %w", err)
+		return nil, err
 	}
 
+	// Create response
 	response := &UsersResponse{
-		Users:     users,
-		Count:     len(users),
+		Users:     allUsers,
+		Count:     len(allUsers),
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		RequestID: lc.AwsRequestID,
+		RequestID: requestID,
+		Version:   s.config.ServiceVersion,
 	}
 
-	// Add response to tracing metadata (only if tracing is enabled)
-	responseData, _ := json.Marshal(response)
-	if seg != nil {
-		seg.AddMetadata("response", string(responseData))
-	}
+	// Add response metadata to tracing
+	s.tracer.AddMetadata(ctx, "response", map[string]interface{}{
+		"userCount":    response.Count,
+		"responseSize": len(allUsers) * 100, // Approximate size
+	})
 
-	logger.Info("Users request processed successfully",
-		zap.String("requestId", lc.AwsRequestID),
-		zap.Int("userCount", len(users)),
-		zap.Int("responseSize", len(responseData)),
-	)
+	s.logger.WithFields(map[string]interface{}{
+		"requestId": requestID,
+		"userCount": response.Count,
+		"version":   response.Version,
+	}).Info("Users request processed successfully")
 
 	return response, nil
 }
 
-func createResponseHeaders(requestID string) map[string]string {
-	return map[string]string{
-		"Content-Type":                     "application/json",
-		"Access-Control-Allow-Origin":      "*",
-		"Access-Control-Allow-Headers":     "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-		"Access-Control-Allow-Methods":     "OPTIONS,POST,GET",
-		"X-Request-ID":                     requestID,
-		"Cache-Control":                    "max-age=300",
+// processSingleUserRequest handles requests for a specific user by ID.
+func (s *UsersService) processSingleUserRequest(ctx context.Context, userID, requestID string) (*UsersResponse, error) {
+	ctx, seg := s.tracer.StartSubsegment(ctx, "processSingleUserRequest")
+	defer s.tracer.Close(seg, nil)
+
+	s.tracer.AddAnnotation(ctx, "userId", userID)
+
+	s.logger.WithFields(map[string]interface{}{
+		"userId":    userID,
+		"requestId": requestID,
+	}).Info("Processing single user request")
+
+	// Validate user ID format
+	if userID == "" {
+		return nil, lambda.NewValidationError("user ID cannot be empty", "id", userID)
+	}
+
+	// Fetch specific user
+	user, err := s.repository.GetUserByID(ctx, userID)
+	if err != nil {
+		// Check if it's a not found error and pass it through
+		if lambda.IsNotFoundError(err) {
+			return nil, err
+		}
+		return nil, lambda.NewInternalErrorWithOperation("user retrieval", "failed to get user from repository", err)
+	}
+
+	// Create response with single user
+	response := &UsersResponse{
+		Users:     []User{*user},
+		Count:     1,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		RequestID: requestID,
+		Version:   s.config.ServiceVersion,
+	}
+
+	s.logger.WithFields(map[string]interface{}{
+		"requestId": requestID,
+		"userId":    userID,
+		"userName":  user.Name,
+	}).Info("Single user request processed successfully")
+
+	return response, nil
+}
+
+// ValidateUsersRequest validates the incoming request for users operations.
+func (s *UsersService) ValidateUsersRequest(ctx context.Context, request events.APIGatewayV2HTTPRequest) error {
+	// Validate HTTP method
+	if request.RequestContext.HTTP.Method != "GET" {
+		return lambda.NewValidationError("only GET method is allowed for users endpoint", "httpMethod", request.RequestContext.HTTP.Method)
+	}
+
+	// Validate path parameters if present
+	if userID, exists := request.PathParameters["id"]; exists {
+		if userID == "" {
+			return lambda.NewValidationError("user ID cannot be empty", "id", userID)
+		}
+	}
+
+	return nil
+}
+
+// CreateHandler creates the Lambda handler function.
+func CreateHandler(cfg *config.Config, logger *observability.Logger, tracer *observability.Tracer) func(context.Context, events.APIGatewayV2HTTPRequest) (interface{}, error) {
+	// Initialize repository (in production, this might be a DynamoDB repository)
+	repository := NewMockUserRepository()
+	service := NewUsersService(cfg, logger, tracer, repository)
+
+	return func(ctx context.Context, request events.APIGatewayV2HTTPRequest) (interface{}, error) {
+		// Validate request first
+		if err := service.ValidateUsersRequest(ctx, request); err != nil {
+			return nil, err
+		}
+
+		return service.ProcessUsersRequest(ctx, request)
 	}
 }
 
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (Response, error) {
-	// Get Lambda context
-	lc, _ := lambdacontext.FromContext(ctx)
+// CustomValidationMiddleware provides users-specific validation.
+func CustomValidationMiddleware(cfg *config.Config) func(lambda.HandlerFuncV2) lambda.HandlerFuncV2 {
+	return func(next lambda.HandlerFuncV2) lambda.HandlerFuncV2 {
+		return func(ctx context.Context, request events.APIGatewayV2HTTPRequest) (interface{}, error) {
+			// Only allow GET requests for users endpoint
+			if request.RequestContext.HTTP.Method != "GET" {
+				return nil, lambda.NewValidationError("only GET method is allowed for users endpoint", "httpMethod", request.RequestContext.HTTP.Method)
+			}
 
-	// Create tracing segment (only in AWS Lambda environment)
-	var seg *xray.Segment
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
-		ctx, seg = xray.BeginSegment(ctx, "users-lambda")
-		defer seg.Close(nil)
-
-		// Add correlation ID for tracing
-		seg.AddAnnotation("correlationId", lc.AwsRequestID)
-	}
-
-	logger.Info("Lambda invocation started",
-		zap.String("requestId", lc.AwsRequestID),
-		zap.String("functionName", os.Getenv("AWS_LAMBDA_FUNCTION_NAME")),
-		zap.String("functionVersion", os.Getenv("AWS_LAMBDA_FUNCTION_VERSION")),
-	)
-
-	// Process the request
-	responseData, err := processUsersRequest(ctx, request)
-	if err != nil {
-		logger.Error("Failed to process users request",
-			zap.Error(err),
-			zap.String("requestId", lc.AwsRequestID),
-		)
-
-		// Add error to tracing (only if tracing is enabled)
-		if seg != nil {
-			seg.AddError(err)
+			return next(ctx, request)
 		}
-
-		// Create error response
-		errorResponse := map[string]interface{}{
-			"message":   "Internal server error",
-			"requestId": lc.AwsRequestID,
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		}
-
-		errorBody, _ := json.Marshal(errorResponse)
-		return Response{
-			StatusCode: 500,
-			Headers:    createResponseHeaders(lc.AwsRequestID),
-			Body:       string(errorBody),
-		}, nil
 	}
-
-	// Marshal response
-	responseBody, err := json.Marshal(responseData)
-	if err != nil {
-		logger.Error("Failed to marshal response",
-			zap.Error(err),
-			zap.String("requestId", lc.AwsRequestID),
-		)
-
-		return Response{
-			StatusCode: 500,
-			Headers:    createResponseHeaders(lc.AwsRequestID),
-			Body:       `{"error": "Internal server error"}`,
-		}, nil
-	}
-
-	response := Response{
-		StatusCode: 200,
-		Headers:    createResponseHeaders(lc.AwsRequestID),
-		Body:       string(responseBody),
-	}
-
-	logger.Info("Lambda invocation completed successfully",
-		zap.String("requestId", lc.AwsRequestID),
-	)
-
-	return response, nil
 }
 
 func main() {
-	lambda.Start(handler)
+	// Load configuration
+	cfg := config.MustLoad()
+
+	// Initialize logger
+	logger := observability.MustNewLogger(cfg)
+	defer logger.Close()
+
+	// Set global logger for packages that need it
+	observability.SetGlobalLogger(logger)
+
+	// Initialize tracer
+	tracer := observability.NewTracer(observability.TracingConfig{
+		Enabled:     cfg.EnableTracing,
+		ServiceName: cfg.ServiceName,
+		Version:     cfg.ServiceVersion,
+	})
+
+	// Create Lambda handler with middleware
+	handler := lambda.NewHandler(cfg, logger, tracer)
+
+	// Create the business logic handler
+	businessHandler := CreateHandler(cfg, logger, tracer)
+
+	// Wrap with middleware (including custom validation)
+	// Wrap with middleware
+	wrappedHandler := handler.WrapV2(
+		businessHandler,
+		CustomValidationMiddleware(cfg),
+		handler.ValidationMiddlewareV2(),
+		handler.LoggingMiddlewareV2(),
+		handler.TracingMiddlewareV2(),
+		handler.TimeoutMiddlewareV2(),
+	)
+
+	logger.WithFields(map[string]interface{}{
+		"service":     cfg.ServiceName,
+		"version":     cfg.ServiceVersion,
+		"environment": cfg.Environment,
+		"tracing":     cfg.EnableTracing,
+		"metrics":     cfg.EnableMetrics,
+	}).Info("Starting users Lambda function")
+
+	// Start Lambda
+	awslambda.Start(wrappedHandler)
 }
